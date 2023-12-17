@@ -16,4 +16,4 @@ if __name__ == '__main__':
         # Sync the command tree and allow slash commands
         await bot.tree.sync()
 
-    
+
