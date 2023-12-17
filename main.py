@@ -2,7 +2,7 @@ from discord import app_commands
 from discord.ext import commands
 from scripts import menu
 # from scripts import sql
-# from config import config
+# from config.py import config.py
 import discord
 
 if __name__ == '__main__':
