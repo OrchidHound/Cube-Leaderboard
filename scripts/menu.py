@@ -1,7 +1,5 @@
 import discord
 
-bot = discord.Bot()
-
 
 class round_winner(discord.ui.View):
     def __init__(self, player_one, player_two, round_number):
