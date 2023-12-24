@@ -19,15 +19,18 @@ if __name__ == '__main__':
     TOKEN = config.TOKEN
     bot = commands.Bot(command_prefix='>', intents=discord.Intents.all())
 
-    # Login confirmation
-    @bot.event
-    async def on_ready():
-        print("Logged in as {0.user}".format(bot))
-        # Sync the command tree and allow slash commands
-        await bot.tree.sync()
+    @bot.hybrid_command(name="new_session", description="Create a new game session.")
+    async def new_session(ctx, users_str: str):
+        users_str = users_str.split()
+        users = []
 
-    @bot.command(name="new_session", description="Create a new game session.")
-    async def new_session(ctx, *users):
+        for user in users_str:
+            try:
+                user = await commands.UserConverter().convert(ctx, user)
+                users.append(user)
+            except commands.errors.UserNotFound:
+                users.append(user)
+
         # List of users must be greater than 2
         if len(users) < 2:
             await ctx.send("You must provide at least 2 players!")
@@ -49,6 +52,13 @@ if __name__ == '__main__':
 
         # await ctx.send(f"Users in session: \n{get_session_users(server_sessions[session_id-1])}\n"
         #                f"Session: {session_id}")
+
+    # Login confirmation
+    @bot.event
+    async def on_ready():
+        print("Logged in as {0.user}".format(bot))
+        # Sync the command tree and allow slash commands
+        await bot.tree.sync()
 
     # Bot initiation/logon
     bot.run(TOKEN)

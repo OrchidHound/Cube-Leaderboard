@@ -1,8 +1,5 @@
-def clean_user(user):
-    try:
-        return int(user.replace('<', '').replace('>', '').replace('@', ''))
-    except (TypeError, ValueError):
-        return None
+import math
+import random
 
 
 def assign_id(session_list):
@@ -28,32 +25,53 @@ def get_session_users(session):
     output = ""
     for user in session.get_users():
         if len(output) > 0:
-            output = f"{output}, {user.name}"
+            output = f"{output}, {user.user_info.name}"
         else:
-            output = f"{user.name}"
+            output = f"{user.user_info.name}"
     return output
 
 
 class Session:
     class User:
-        def __init__(self, name, user_type):
-            self.name = name
-            self.user_type = user_type
+        def __init__(self, user_info):
+            self.user_info = user_info
             self.data = {}
             self.seat = 0
 
         def update_date(self, opponent, score):
             self.data = {opponent: score}
 
+        def get_name(self):
+            if type(self.user_info) == str:
+                return self.user_info
+            else:
+                return self.user_info.name
+
     def __init__(self, server, users, session_id):
         self.server = server
-        self.users = users
-        self.users = [self.User(user, 'permanent') if self.server.get_member(clean_user(user)) else
-                      self.User(user, 'temporary') for user in self.users]
+        self.users = [self.User(user) for user in users]
         self.session_id = session_id
+        self.matches = {}
+        self.bye = None
 
     def get_users(self):
         return [user for user in self.users]
 
     def get_id(self):
         return self.session_id
+
+    def new_round(self):
+        match_num = len(self.matches)+1
+        self.matches[match_num] = {}
+        unassigned_players = self.get_users()
+
+        for pair_num in range(math.floor(len(self.get_users()) / 2)):
+            self.matches[match_num][pair_num] = []
+            for player_num in range(2):
+                player = random.choice(unassigned_players)
+                self.matches[match_num][pair_num].append(player)
+                unassigned_players.remove(player)
+            if len(unassigned_players) == 1:
+                self.bye = unassigned_players[0]
+
+        return self.matches[match_num]
