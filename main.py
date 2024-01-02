@@ -1,7 +1,7 @@
 from discord import app_commands
 from discord.ext import commands
 from scripts import menu
-from scripts.embeds import SessionView
+from scripts.view import HeadView
 from scripts.session import Session, assign_id, get_session, get_session_users
 # from scripts import sql
 import config
@@ -47,11 +47,8 @@ if __name__ == '__main__':
         session_id = assign_id(server_sessions)
         server_sessions.append(Session(server, users, session_id=session_id))
 
-        session_view = SessionView(server_sessions, next(session for session in server_sessions if session.session_id == session_id))
+        session_view = HeadView(server_sessions, next(session for session in server_sessions if session.session_id == session_id), ctx.channel)
         await session_view.send(ctx)
-
-        # await ctx.send(f"Users in session: \n{get_session_users(server_sessions[session_id-1])}\n"
-        #                f"Session: {session_id}")
 
     # Login confirmation
     @bot.event

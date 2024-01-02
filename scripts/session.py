@@ -60,18 +60,22 @@ class Session:
     def get_id(self):
         return self.session_id
 
-    def new_round(self):
+    def new_match(self):
         match_num = len(self.matches)+1
         self.matches[match_num] = {}
         unassigned_players = self.get_users()
 
-        for pair_num in range(math.floor(len(self.get_users()) / 2)):
-            self.matches[match_num][pair_num] = []
-            for player_num in range(2):
-                player = random.choice(unassigned_players)
-                self.matches[match_num][pair_num].append(player)
-                unassigned_players.remove(player)
-            if len(unassigned_players) == 1:
-                self.bye = unassigned_players[0]
+        for pairing in range(math.floor(len(self.get_users()) / 2)):
+            self.matches[match_num][pairing] = {}
+            pair_info = self.matches[match_num][pairing]
+            for player_num in range(1, 3):
+                if len(unassigned_players) != 0:
+                    player = random.choice(unassigned_players)
+                    pair_info[f'p{player_num}'] = player
+                    unassigned_players.remove(player)
+            pair_info["r1_winner"], pair_info["r2_winner"], pair_info["r3_winner"] = None, None, None
+
+        if len(unassigned_players) == 1:
+            self.bye = unassigned_players[0]
 
         return self.matches[match_num]
