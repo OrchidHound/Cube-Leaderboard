@@ -78,6 +78,9 @@ class MatchView(SessionView):
 class HeadView(SessionView):
     def __init__(self, session_list, session, ctx):
         super().__init__(session_list=session_list, session=session, ctx=ctx)
+        self.confirm_roster = self.roster_button()
+        self.confirm_draft = self.draft_button()
+        self.cancel = self.cancel_button()
 
     def create_embed(self):
         embed = discord.Embed(title=f"Session {self.session.session_id}")
@@ -133,31 +136,61 @@ class HeadView(SessionView):
             case 0:
                 self.clear_items()
             case 1:
-                self.remove_item(self.confirm_draft_button)
+                self.add_item(self.cancel)
+                self.add_item(self.confirm_roster)
             case 2:
-                self.remove_item(self.confirm_roster_button)
-                self.add_item(self.confirm_draft_button)
+                self.remove_item(self.confirm_roster)
+                self.add_item(self.confirm_draft)
             case 3:
-                self.remove_item(self.confirm_draft_button)
-                self.add_item()
+                self.remove_item(self.confirm_draft)
+                # self.add_item()
 
-    @discord.ui.button(label="Cancel",
-                       style=discord.ButtonStyle.danger)
-    async def cancel_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.defer()
-        self.mode = 0
-        await self.update_message()
+    def cancel_button(self):
+        button = discord.ui.Button(label="Cancel",
+                                   style=discord.ButtonStyle.danger)
 
-    @discord.ui.button(label="Confirm Roster",
-                       style=discord.ButtonStyle.green)
-    async def confirm_roster_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.defer()
-        self.mode = 2
-        await self.update_message()
+        async def cancel(interaction: discord.Interaction, button: discord.ui.Button):
+            await interaction.response.defer()
+            self.mode = 0
+            await self.update_message()
 
-    @discord.ui.button(label="Draft Complete",
-                       style=discord.ButtonStyle.green)
-    async def confirm_draft_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.defer()
-        self.mode = 3
-        await self.update_message()
+        button.callback = cancel
+        return button
+
+    def roster_button(self):
+        button = discord.ui.Button(label="Confirm Roster",
+                                   style=discord.ButtonStyle.green)
+
+        async def confirm_roster(interaction: discord.Interaction, button: discord.ui.Button):
+            await interaction.response.defer()
+            self.mode = 2
+            await self.update_message()
+
+        button.callback = confirm_roster
+        return button
+
+    def draft_button(self):
+        button = discord.ui.Button(label="Draft Complete",
+                                   style=discord.ButtonStyle.green)
+
+        async def confirm_draft(interaction: discord.Interaction, button: discord.ui.Button):
+            await interaction.response.defer()
+            self.mode = 3
+            await self.update_message()
+
+        button.callback = confirm_draft
+        return button
+
+    # @discord.ui.button(label="Confirm Roster",
+    #                    style=discord.ButtonStyle.green)
+    # async def confirm_roster_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+    #     await interaction.response.defer()
+    #     self.mode = 2
+    #     await self.update_message()
+    #
+    # @discord.ui.button(label="Draft Complete",
+    #                    style=discord.ButtonStyle.green)
+    # async def confirm_draft_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+    #     await interaction.response.defer()
+    #     self.mode = 3
+    #     await self.update_message()
