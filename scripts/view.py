@@ -149,7 +149,7 @@ class HeadView(SessionView):
         button = discord.ui.Button(label="Cancel",
                                    style=discord.ButtonStyle.danger)
 
-        async def cancel(interaction: discord.Interaction, button: discord.ui.Button):
+        async def cancel(interaction: discord.Interaction):
             await interaction.response.defer()
             self.mode = 0
             await self.update_message()
@@ -161,7 +161,7 @@ class HeadView(SessionView):
         button = discord.ui.Button(label="Confirm Roster",
                                    style=discord.ButtonStyle.green)
 
-        async def confirm_roster(interaction: discord.Interaction, button: discord.ui.Button):
+        async def confirm_roster(interaction: discord.Interaction):
             await interaction.response.defer()
             self.mode = 2
             await self.update_message()
@@ -173,7 +173,7 @@ class HeadView(SessionView):
         button = discord.ui.Button(label="Draft Complete",
                                    style=discord.ButtonStyle.green)
 
-        async def confirm_draft(interaction: discord.Interaction, button: discord.ui.Button):
+        async def confirm_draft(interaction: discord.Interaction):
             await interaction.response.defer()
             self.mode = 3
             await self.update_message()
