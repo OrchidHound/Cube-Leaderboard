@@ -19,7 +19,7 @@ class SessionView(discord.ui.View):
     async def update_message(self):
         self.update_buttons()
         await self.message.edit(embed=self.create_embed(), view=self)
-        for pair_view in self.pairs:
+        for pair_view in self.session.active:
             await pair_view.send(self.ctx)
 
     def create_embed(self):
@@ -64,11 +64,11 @@ class MatchView(SessionView):
             async def update_match(interaction, round_num=round_num):
                 await interaction.response.defer()
                 if interaction.data['values'][0] == 'p1':
-                    print(f"{p1.get_name()} wins round {round_num}!")
+                    self.pair_info[f'r{round_num}_winner'] = p1
                 elif interaction.data['values'][0] == 'p2':
-                    print(f"{p2.get_name()} wins round {round_num}!")
+                    self.pair_info[f'r{round_num}_winner'] = p2
                 else:
-                    print(f"Round {round_num} ends in a draw!")
+                    self.pair_info[f'r{round_num}_winner'] = 'draw'
 
             select.callback = update_match
             select_menus.append(select)
@@ -81,6 +81,7 @@ class HeadView(SessionView):
         self.confirm_roster = self.roster_button()
         self.confirm_draft = self.draft_button()
         self.cancel = self.cancel_button()
+        self.submit_match = self.submit_match_button()
 
     def create_embed(self):
         embed = discord.Embed(title=f"Session {self.session.session_id}")
@@ -127,7 +128,7 @@ class HeadView(SessionView):
                                                     f"vs. "
                                                     f"{value['p2'].get_name()}", inline=False)
                     pair_view = MatchView(self.session_list, self.session, self.ctx, value, key)
-                    self.pairs.append(pair_view)
+                    self.session.active.append(pair_view)
 
         return embed
 
@@ -136,14 +137,17 @@ class HeadView(SessionView):
             case 0:
                 self.clear_items()
             case 1:
+                self.clear_items()
                 self.add_item(self.cancel)
                 self.add_item(self.confirm_roster)
             case 2:
-                self.remove_item(self.confirm_roster)
+                self.clear_items()
+                self.add_item(self.cancel)
                 self.add_item(self.confirm_draft)
             case 3:
-                self.remove_item(self.confirm_draft)
-                # self.add_item()
+                self.clear_items()
+                self.add_item(self.cancel)
+                self.add_item(self.submit_match)
 
     def cancel_button(self):
         button = discord.ui.Button(label="Cancel",
@@ -151,6 +155,7 @@ class HeadView(SessionView):
 
         async def cancel(interaction: discord.Interaction):
             await interaction.response.defer()
+            await self.session.delete_active_matches(self.ctx)
             self.mode = 0
             await self.update_message()
 
@@ -181,16 +186,21 @@ class HeadView(SessionView):
         button.callback = confirm_draft
         return button
 
-    # @discord.ui.button(label="Confirm Roster",
-    #                    style=discord.ButtonStyle.green)
-    # async def confirm_roster_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-    #     await interaction.response.defer()
-    #     self.mode = 2
-    #     await self.update_message()
-    #
-    # @discord.ui.button(label="Draft Complete",
-    #                    style=discord.ButtonStyle.green)
-    # async def confirm_draft_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-    #     await interaction.response.defer()
-    #     self.mode = 3
-    #     await self.update_message()
+    def submit_match_button(self):
+        button = discord.ui.Button(label="Submit",
+                                   style=discord.ButtonStyle.green)
+
+        async def submit_match(interaction: discord.Interaction):
+            failed = False
+            await interaction.response.defer()
+            for pairing in self.session.matches[len(self.session.matches)].values():
+                if pairing['r1_winner'] is None or pairing['r2_winner'] is None or pairing['r1_winner'] is None:
+                    failed = True
+                    await self.ctx.send(f"Invalid round data for {pairing['p1'].get_name()} vs. {pairing['p2'].get_name()}.",
+                                        delete_after=10)
+            if not failed:
+                await self.session.delete_active_matches(self.ctx)
+                await self.update_message()
+
+        button.callback = submit_match
+        return button

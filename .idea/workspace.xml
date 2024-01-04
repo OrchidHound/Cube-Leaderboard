@@ -6,6 +6,7 @@
   <component name="ChangeListManager">
     <list default="true" id="04be35e8-3f4e-43c9-b4c7-2b4ecaf02e9e" name="Changes" comment="">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/scripts/session.py" beforeDir="false" afterPath="$PROJECT_DIR$/scripts/session.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/scripts/view.py" beforeDir="false" afterPath="$PROJECT_DIR$/scripts/view.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
@@ -114,5 +115,13 @@
         </entry>
       </map>
     </option>
+  </component>
+  <component name="XDebuggerManager">
+    <watches-manager>
+      <configuration name="PythonConfigurationType">
+        <watch expression="__py_debug_temp_var_130337463['r1_winner']" />
+        <watch expression="__py_debug_temp_var_130337463['r1_winner']" />
+      </configuration>
+    </watches-manager>
   </component>
 </project>

@@ -52,6 +52,7 @@ class Session:
         self.users = [self.User(user) for user in users]
         self.session_id = session_id
         self.matches = {}
+        self.active = []
         self.bye = None
 
     def get_users(self):
@@ -68,7 +69,7 @@ class Session:
         for pairing in range(math.floor(len(self.get_users()) / 2)):
             self.matches[match_num][pairing] = {}
             pair_info = self.matches[match_num][pairing]
-            for player_num in range(1, 3):
+            for player_num in [1, 2]:
                 if len(unassigned_players) != 0:
                     player = random.choice(unassigned_players)
                     pair_info[f'p{player_num}'] = player
@@ -79,3 +80,10 @@ class Session:
             self.bye = unassigned_players[0]
 
         return self.matches[match_num]
+
+    async def delete_active_matches(self, ctx):
+        if len(self.active) > 0:
+            for pair in self.active:
+                message = await ctx.fetch_message(pair.message.id)
+                await message.delete()
+            self.active = []
