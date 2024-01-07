@@ -123,18 +123,30 @@ class HeadView(SessionView):
                                     f"The match {len(self.session.matches)} pairings are:"
 
                 for key, value in match.items():
-                    embed.add_field(name=f"", value=f"> "
-                                                    f"{value['p1'].get_name()} "
-                                                    f"vs. "
-                                                    f"{value['p2'].get_name()}", inline=False)
+                    embed.add_field(name=f"",
+                                    value=f"> "
+                                          f"`{value['p1'].get_name()} "
+                                          f"({value['p1'].get_wins()}/{value['p1'].get_losses()}) "
+                                          f"\t--VS--\t"
+                                          f"{value['p2'].get_name()} "
+                                          f"({value['p2'].get_wins()}/{value['p2'].get_losses()})`",
+                                    inline=False)
                     pair_view = MatchView(self.session_list, self.session, self.ctx, value, key)
                     self.session.active.append(pair_view)
+            case 4:
+                winner = self.session.get_winner()
+                embed.description = f"Congratulations to {winner.get_name()} for winning!"
+                for user in self.session.get_users():
+                    embed.add_field(name=f"",
+                                    value=f">`{user.get_name()} "
+                                          f"({user.get_wins()} / {user.get_losses()})`",
+                                    inline=False)
 
         return embed
 
     def update_buttons(self):
         match self.mode:
-            case 0:
+            case 0, 4:
                 self.clear_items()
             case 1:
                 self.clear_items()
@@ -199,7 +211,11 @@ class HeadView(SessionView):
                     await self.ctx.send(f"Invalid round data for {pairing['p1'].get_name()} vs. {pairing['p2'].get_name()}.",
                                         delete_after=10)
             if not failed:
+                self.session.update_winners()
                 await self.session.delete_active_matches(self.ctx)
+                winner = self.session.get_winner()
+                if winner is not None:
+                    self.mode = 4
                 await self.update_message()
 
         button.callback = submit_match
