@@ -107,73 +107,89 @@ class Session:
                         break
         return prior_opponents
 
+    def match_players(self, current_player, player_list):
+        prior_opponents = self.get_prior_opponents(current_player)
+        try:
+            matched_player = random.choice(
+                [user for user in player_list if user not in prior_opponents]
+            )
+            player_list.remove(matched_player)
+            return matched_player, True
+        except IndexError:
+            return None, False
+
+    def create_match_pair(self, match_num, p1, p2):
+        if p1 is not None and p2 is not None:
+            self.matches[match_num][len(self.matches[match_num]) + 1] = {}
+            pair_info = self.matches[match_num][len(self.matches[match_num])]
+            pair_info['p1'] = p1
+            pair_info['p2'] = p2
+            pair_info["r1_winner"], pair_info["r2_winner"], pair_info["r3_winner"] = None, None, None
+
     def new_match(self):
-        match_num = len(self.matches)+1
-        self.matches[match_num] = {}
-        unassigned_winners = [user for user in self.get_users() if user.record['losses'] == 0]
-        unassigned_losers = {1: [], 2: []}
-        for i in range(1, match_num):
-            unassigned_losers[i] = [user for user in self.get_users() if user.record['losses'] == i]
+        valid = False
+        match_num = len(self.matches) + 1
 
-        while unassigned_winners:
-            self.matches[match_num][len(self.matches[match_num]) + 1] = {}
-            pair_info = self.matches[match_num][len(self.matches[match_num])]
-            matched_player = None
+        while not valid:
+            valid = True
+            self.matches[match_num] = {}
+            unassigned_winners = [user for user in self.get_users() if user.record['losses'] == 0]
+            unassigned_losers = {1: [], 2: []}
+            for i in range(1, match_num):
+                unassigned_losers[i] = [user for user in self.get_users() if user.record['losses'] == i]
 
-            if self.bye is not None and self.bye in unassigned_winners:
-                current_player = self.bye
-                unassigned_winners.remove(self.bye)
-                self.bye = None
-            else:
-                current_player = unassigned_winners.pop()
+            while unassigned_winners:
+                matched_player = None
 
-            if len(unassigned_winners) > 0:
-                matched_player = random.choice(unassigned_winners)
-                unassigned_winners.remove(matched_player)
-            elif len(unassigned_winners) == 0 and unassigned_losers[1]:
-                matched_player = random.choice(unassigned_losers[1])
-                unassigned_losers[1].remove(matched_player)
-            else:
-                self.bye = current_player
+                if self.bye is not None and self.bye in unassigned_winners:
+                    current_player = self.bye
+                    unassigned_winners.remove(self.bye)
+                    self.bye = None
+                else:
+                    current_player = random.choice(unassigned_winners)
+                    unassigned_winners.remove(current_player)
 
-            if matched_player is not None:
-                pair_info['p1'] = current_player
-                pair_info['p2'] = matched_player
-                pair_info["r1_winner"], pair_info["r2_winner"], pair_info["r3_winner"] = None, None, None
+                if len(unassigned_winners) > 0:
+                    matched_player, valid = self.match_players(current_player, unassigned_winners)
+                elif len(unassigned_winners) == 0 and unassigned_losers[1]:
+                    matched_player, valid = self.match_players(current_player, unassigned_losers[1])
 
-        while len(unassigned_losers[1]) + len(unassigned_losers[2]) > 1:
-            self.matches[match_num][len(self.matches[match_num]) + 1] = {}
-            pair_info = self.matches[match_num][len(self.matches[match_num])]
-            matched_player = None
+                if len(unassigned_winners) == 1 and not unassigned_losers[1]:
+                    self.bye = unassigned_winners.pop()
 
-            if self.bye is not None:
-                current_player = self.bye
-                self.bye = None
-            elif len(unassigned_losers[1]) > 1:
-                current_player = unassigned_losers[1].pop()
-                prior_opponents = self.get_prior_opponents(current_player)
-                matched_player = random.choice([user for user in unassigned_losers[1] if user not in prior_opponents])
-                unassigned_losers[1].remove(matched_player)
-            elif len(unassigned_losers[1]) == 1:
-                current_player = unassigned_losers[1].pop()
-                prior_opponents = self.get_prior_opponents(current_player)
-                matched_player = random.choice([user for user in unassigned_losers[2] if user not in prior_opponents])
-                unassigned_losers[2].remove(matched_player)
-            else:
-                current_player = unassigned_losers[2].pop()
-                matched_player = random.choice(unassigned_losers[2])
-                unassigned_losers[2].remove(matched_player)
+                self.create_match_pair(match_num, current_player, matched_player)
 
-            if matched_player is not None:
-                pair_info['p1'] = current_player
-                pair_info['p2'] = matched_player
-                pair_info["r1_winner"], pair_info["r2_winner"], pair_info["r3_winner"] = None, None, None
+            while unassigned_losers[1] or unassigned_losers[2]:
+                current_player = None
+                matched_player = None
 
-        if unassigned_losers[1] or unassigned_losers[2]:
-            if unassigned_losers[1]:
-                self.bye = unassigned_losers[1].pop()
-            else:
-                self.bye = unassigned_losers[2].pop()
+                if self.bye is not None:
+                    current_player = self.bye
+                    unassigned_losers[1].remove(current_player)
+                    self.bye = None
+                    if len(unassigned_losers[1]) > 1:
+                        matched_player, valid = self.match_players(current_player, unassigned_losers[1])
+                    elif len(unassigned_losers[2]) > 1:
+                        matched_player, valid = self.match_players(current_player, unassigned_losers[2])
+                elif len(unassigned_losers[1]) > 1:
+                    current_player = random.choice(unassigned_losers[1])
+                    unassigned_losers[1].remove(current_player)
+                    matched_player, valid = self.match_players(current_player, unassigned_losers[1])
+                elif len(unassigned_losers[1]) == 1 and unassigned_losers[2]:
+                    current_player = random.choice(unassigned_losers[1])
+                    unassigned_losers[1].remove(current_player)
+                    matched_player, valid = self.match_players(current_player, unassigned_losers[2])
+                elif len(unassigned_losers[2]) > 1:
+                    current_player = random.choice(unassigned_losers[2])
+                    unassigned_losers[2].remove(current_player)
+                    matched_player, valid = self.match_players(current_player, unassigned_losers[2])
+
+                if len(unassigned_losers[1]) == 1 and not unassigned_losers[2]:
+                    self.bye = unassigned_losers[1].pop()
+                elif len(unassigned_losers[2]) == 1 and not unassigned_losers[1]:
+                    self.bye = unassigned_losers[2].pop()
+
+                self.create_match_pair(match_num, current_player, matched_player)
 
         return self.matches[match_num]
 

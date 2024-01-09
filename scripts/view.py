@@ -119,47 +119,54 @@ class HeadView(SessionView):
                             embed.add_field(name=f"\n> Seat {user.seat} ", value=f"> {user.get_name()}", inline=False)
             case 3:
                 match = self.session.new_match()
-                embed.description = "It's time to play!\n" \
+                bye_message = ""
+                if self.session.bye is not None:
+                    bye_user = self.session.bye
+                    bye_message = f"Since there are an odd number of players, {bye_user.get_name()} gets a bye.\n"
+
+                embed.description = "It's time to play!\n" + \
+                                    bye_message + \
                                     f"The match {len(self.session.matches)} pairings are:"
 
                 for key, value in match.items():
                     embed.add_field(name=f"",
                                     value=f"> "
                                           f"`{value['p1'].get_name()} "
-                                          f"({value['p1'].get_wins()}/{value['p1'].get_losses()}) "
-                                          f"\t--VS--\t"
+                                          f"( {value['p1'].get_wins()} / {value['p1'].get_losses()} ) "
+                                          f"\t\t--VS--\t\t"
                                           f"{value['p2'].get_name()} "
-                                          f"({value['p2'].get_wins()}/{value['p2'].get_losses()})`",
+                                          f"( {value['p2'].get_wins()} / {value['p2'].get_losses()} )`",
                                     inline=False)
                     pair_view = MatchView(self.session_list, self.session, self.ctx, value, key)
                     self.session.active.append(pair_view)
-            case 4:
+            case 5:
                 winner = self.session.get_winner()
                 embed.description = f"Congratulations to {winner.get_name()} for winning!"
                 for user in self.session.get_users():
-                    embed.add_field(name=f"",
-                                    value=f">`{user.get_name()} "
-                                          f"({user.get_wins()} / {user.get_losses()})`",
+                    embed.add_field(name=f"{user.get_name()}",
+                                    value=f"( {user.get_wins()} / {user.get_losses()} )",
                                     inline=False)
+                for session in self.session_list:
+                    if session.session_id == self.session.session_id:
+                        self.session_list.remove(session)
 
         return embed
 
     def update_buttons(self):
+        self.clear_items()
         match self.mode:
-            case 0, 4:
-                self.clear_items()
             case 1:
-                self.clear_items()
                 self.add_item(self.cancel)
                 self.add_item(self.confirm_roster)
             case 2:
-                self.clear_items()
                 self.add_item(self.cancel)
                 self.add_item(self.confirm_draft)
             case 3:
-                self.clear_items()
-                self.add_item(self.cancel)
                 self.add_item(self.submit_match)
+            case 4:
+                pass
+                # self.add_item(self.nevermind)
+                # self.add_item(self.confirm_players)
 
     def cancel_button(self):
         button = discord.ui.Button(label="Cancel",
@@ -215,8 +222,32 @@ class HeadView(SessionView):
                 await self.session.delete_active_matches(self.ctx)
                 winner = self.session.get_winner()
                 if winner is not None:
-                    self.mode = 4
+                    self.mode = 5
                 await self.update_message()
 
         button.callback = submit_match
+        return button
+
+    def edit_players_button(self):
+        button = discord.ui.Button(label="Edit Players",
+                                   style=discord.ButtonStyle.blurple)
+
+        async def edit_players(interaction: discord.Interaction):
+            await interaction.response.defer()
+            self.mode = 4
+            await self.update_message()
+
+        button.callback = edit_players
+        return button
+
+    def confirm_players_button(self):
+        button = discord.ui.Button(label="Confirm",
+                                   style=discord.ButtonStyle.green)
+
+        async def confirm_players(interaction: discord.Interaction):
+            await interaction.response.defer()
+            self.mode = 3
+            await self.update_message()
+
+        button.callback = confirm_players
         return button
