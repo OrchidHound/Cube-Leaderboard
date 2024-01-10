@@ -54,6 +54,9 @@ class Session:
         self.server = server
         self.users = [self.User(user) for user in users]
         self.session_id = session_id
+        self.players_to_remove = []
+        self.removed_players = []
+        self.game_winners = None
         self.matches = {}
         self.active = []
         self.bye = None
@@ -81,18 +84,12 @@ class Session:
                 match['p2'].record['wins'] += 1
                 match['p1'].record['losses'] += 1
 
-    def get_users(self):
-        return [user for user in self.users]
+    def get_active_users(self):
+        removed_player_names = [user.get_name() for user in self.removed_players]
+        return [user for user in self.users if user.get_name() not in removed_player_names]
 
     def get_id(self):
         return self.session_id
-
-    def get_winner(self):
-        winners = [user for user in self.get_users() if user.record['losses'] == 0]
-        if len(winners) == 1:
-            return winners[0]
-        else:
-            return None
 
     def get_prior_opponents(self, player):
         prior_opponents = []
@@ -106,6 +103,15 @@ class Session:
                         prior_opponents.append(pair['p1'])
                         break
         return prior_opponents
+
+    def set_game_winners(self, premature=False):
+        winners = [user for user in self.get_active_users() if user.record['losses'] == 0]
+        if premature:
+            self.game_winners = winners
+        elif len(winners) == 1:
+            self.game_winners = winners[0]
+        else:
+            return None
 
     def match_players(self, current_player, player_list):
         prior_opponents = self.get_prior_opponents(current_player)
@@ -133,10 +139,10 @@ class Session:
         while not valid:
             valid = True
             self.matches[match_num] = {}
-            unassigned_winners = [user for user in self.get_users() if user.record['losses'] == 0]
+            unassigned_winners = [user for user in self.get_active_users() if user.record['losses'] == 0]
             unassigned_losers = {1: [], 2: []}
             for i in range(1, match_num):
-                unassigned_losers[i] = [user for user in self.get_users() if user.record['losses'] == i]
+                unassigned_losers[i] = [user for user in self.get_active_users() if user.record['losses'] == i]
 
             while unassigned_winners:
                 matched_player = None

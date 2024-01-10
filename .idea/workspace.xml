@@ -116,4 +116,14 @@
       </map>
     </option>
   </component>
+  <component name="XDebuggerManager">
+    <watches-manager>
+      <configuration name="PythonConfigurationType">
+        <watch expression="self.session.users" language="Python" />
+        <watch expression="self.session.get_active_users()" language="Python" />
+        <watch expression="self.session.players_to_remove" language="Python" />
+        <watch expression="self.session.removed_players" language="Python" />
+      </configuration>
+    </watches-manager>
+  </component>
 </project>
