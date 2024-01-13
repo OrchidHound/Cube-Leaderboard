@@ -1,12 +1,9 @@
-from discord import app_commands
 from discord.ext import commands
-from scripts import menu
 from scripts.view import HeadView
-from scripts.session import Session, assign_id, get_session, get_session_users
-# from scripts import sql
+from scripts.session import Session, assign_id
 import config
 import discord
-import re
+import scripts.sql as sql
 
 
 if __name__ == '__main__':
@@ -14,6 +11,7 @@ if __name__ == '__main__':
     # Each server will have a list of sessions, labelled by number
     # Each session will be a list of User objects
     sessions = {}
+    database = sql.sql(server_id=0)
 
     # Discord setup
     TOKEN = config.TOKEN
@@ -49,6 +47,32 @@ if __name__ == '__main__':
 
         session_view = HeadView(server_sessions, next(session for session in server_sessions if session.session_id == session_id), ctx.channel)
         await session_view.send(ctx)
+
+
+    @bot.hybrid_command(name="elo", description="Retrieve your current elo score.")
+    async def elo(ctx):
+        database.server_id = ctx.guild.id
+        database.set_user(ctx.author)
+        embed = discord.Embed(title=f"{ctx.author.name}",
+                              description=f"Your elo score is {database.get_elo(ctx.author)}.",
+                              color=0x24bc9c)
+        await ctx.send(embed=embed)
+
+
+    @bot.hybrid_command(name="leaderboard", description="Get the current leaderboard for your server.")
+    async def elo(ctx):
+        rank = 1
+        database.server_id = ctx.guild.id
+        leaderboard = database.get_leaderboard()
+        embed = discord.Embed(title=f"Leaderboard",
+                              description="",
+                              color=0x24bc9c)
+        for user in leaderboard:
+            embed.add_field(name=f"`{' ' * 10}Rank {rank}{' ' * (10 - len(str(user[0])))}`",
+                            value=f"> {user[1]}\n> {user[2]}",
+                            inline=False)
+            rank += 1
+        await ctx.send(embed=embed)
 
     # Login confirmation
     @bot.event

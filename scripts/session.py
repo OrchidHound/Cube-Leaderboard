@@ -1,4 +1,4 @@
-import math
+import scripts.sql as sql
 import random
 
 
@@ -35,6 +35,7 @@ class Session:
     class User:
         def __init__(self, user_info):
             self.user_info = user_info
+            self.original_elo = 1200
             self.record = {'wins': 0, 'losses': 0}
             self.seat = 0
 
@@ -56,10 +57,15 @@ class Session:
         self.session_id = session_id
         self.players_to_remove = []
         self.removed_players = []
+        self.database = sql.sql(server_id=self.server.id)
         self.game_winners = None
         self.matches = {}
         self.active = []
         self.bye = None
+        self.longest = self.get_longest_user_name()
+        for user in self.users:
+            self.database.set_user(user.get_name())
+            user.original_elo = self.database.get_elo(user.get_name())
 
     def update_winners(self):
         for match in self.matches[len(self.matches)].values():
@@ -71,18 +77,22 @@ class Session:
                 try:
                     if round_winner == match['p1']:
                         p1_score += 1
-                        p2_score -= 1
                     elif round_winner == match['p2']:
                         p2_score += 1
-                        p1_score -= 1
                 except TypeError:
                     pass
             if p1_score > p2_score:
                 match['p1'].record['wins'] += 1
                 match['p2'].record['losses'] += 1
+                self.database.adjust_score(winner=match['p1'].get_name(),
+                                           loser=match['p2'].get_name(),
+                                           score_diff=(p1_score - p2_score))
             elif p1_score < p2_score:
                 match['p2'].record['wins'] += 1
                 match['p1'].record['losses'] += 1
+                self.database.adjust_score(winner=match['p2'].get_name(),
+                                           loser=match['p1'].get_name(),
+                                           score_diff=(p2_score - p1_score))
 
     def get_active_users(self):
         removed_player_names = [user.get_name() for user in self.removed_players]
@@ -90,6 +100,13 @@ class Session:
 
     def get_id(self):
         return self.session_id
+
+    def get_longest_user_name(self):
+        longest_name = 0
+        for user in self.users:
+            if len(user.get_name()) > longest_name:
+                longest_name = len(user.get_name())
+        return longest_name
 
     def get_prior_opponents(self, player):
         prior_opponents = []
@@ -109,9 +126,9 @@ class Session:
         if premature:
             self.game_winners = winners
         elif len(winners) == 1:
-            self.game_winners = winners[0]
+            self.game_winners = winners
         else:
-            return None
+            self.game_winners = None
 
     def match_players(self, current_player, player_list):
         prior_opponents = self.get_prior_opponents(current_player)

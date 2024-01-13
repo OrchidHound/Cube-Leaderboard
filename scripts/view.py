@@ -41,7 +41,8 @@ class MatchView(SessionView):
         self.message = await ctx.send(embed=self.create_embed(), view=self)
 
     def create_embed(self):
-        return discord.Embed(title=f"{self.pair_info['p1'].get_name()} vs. {self.pair_info['p2'].get_name()}")
+        return discord.Embed(title=f"{self.pair_info['p1'].get_name()} vs. {self.pair_info['p2'].get_name()}",
+                             color=0x24bc9c)
 
     def versus_listings(self):
         select_menus = []
@@ -90,7 +91,8 @@ class HeadView(SessionView):
         self.end_game = self.end_button()
 
     def create_embed(self):
-        embed = discord.Embed(title=f"Session {self.session.session_id}")
+        embed = discord.Embed(title=f"Session {self.session.session_id}",
+                              color=0x24bc9c)
 
         match self.mode:
             case 0:
@@ -103,7 +105,11 @@ class HeadView(SessionView):
             case 1:
                 embed.description = "Start with these users?"
                 for user in self.session.get_active_users():
-                    embed.add_field(name="", value=f"> {user.get_name()}", inline=False)
+                    spacing = ' ' * (self.session.longest - len(user.get_name()))
+                    embed.add_field(name="",
+                                    value=f"> `{user.get_name()}{spacing} "
+                                          f"| {self.session.database.get_elo(user.get_name())}`",
+                                    inline=False)
             case 2:
                 seats = list(range(1, len(self.session.get_active_users()) + 1))
                 player_amt = len(self.session.get_active_users())
@@ -122,7 +128,7 @@ class HeadView(SessionView):
                 for seat_number in range(player_amt + 1):
                     for user in self.session.get_active_users():
                         if user.seat == seat_number:
-                            embed.add_field(name=f"\n> Seat {user.seat} ", value=f"> {user.get_name()}", inline=False)
+                            embed.add_field(name=f"\n> Seat {user.seat} ", value=f"> `{user.get_name()}`", inline=False)
             case 3:
                 match = self.session.new_match()
                 bye_message = ""
@@ -135,11 +141,13 @@ class HeadView(SessionView):
                                     f"The match {len(self.session.matches)} pairings are:"
 
                 for key, value in match.items():
+                    left_spacing = ' ' * (self.session.longest - len(value['p1'].get_name()))
+                    right_spacing = ' ' * (self.session.longest - len(value['p2'].get_name()))
                     embed.add_field(name=f"",
                                     value=f"> "
                                           f"`{value['p1'].get_name()} "
                                           f"( {value['p1'].get_wins()} / {value['p1'].get_losses()} ) "
-                                          f"\t\t--VS--\t\t"
+                                          f"{left_spacing}  --VS--  {right_spacing}"
                                           f"{value['p2'].get_name()} "
                                           f"( {value['p2'].get_wins()} / {value['p2'].get_losses()} )`",
                                     inline=False)
@@ -154,11 +162,22 @@ class HeadView(SessionView):
                     embed.description = "Congratulations to the following players for winning!\n" \
                                         f"{', '.join([winner.get_name() for winner in self.session.game_winners])}"
                 else:
-                    embed.description = f"Congratulations to {self.session.game_winners.get_name()} for winning!"
+                    embed.description = f"Congratulations to {self.session.game_winners[0].get_name()} for winning!"
 
                 for user in self.session.users:
-                    embed.add_field(name=f"{user.get_name()}",
-                                    value=f"( {user.get_wins()} / {user.get_losses()} )",
+                    elo_diff = self.session.database.get_elo(user.get_name()) - user.original_elo
+                    spacing = 25 - len(user.get_name())
+                    if spacing % 2 == 0:
+                        left_spacing = ' ' * int(spacing / 2)
+                        right_spacing = ' ' * int(spacing / 2)
+                    else:
+                        left_spacing = ' ' * int(spacing / 2)
+                        right_spacing = ' ' * (int(spacing / 2) + 1)
+
+                    embed.add_field(name=f"`{left_spacing}{user.get_name()}{right_spacing}`",
+                                    value=f"> `Wins/Losses: ( {user.get_wins()} / {user.get_losses()} )`\n"
+                                          f"> `Elo Change:  "
+                                          f"( {elo_diff} )`",
                                     inline=False)
                 for session in self.session_list:
                     if session.session_id == self.session.session_id:
@@ -318,6 +337,9 @@ class HeadView(SessionView):
                 for _user in self.session.get_active_users():
                     if _user.get_name() == user_to_remove:
                         self.session.players_to_remove.append(_user)
+                if self.session.bye is not None:
+                    if self.session.bye.get_name() == user_to_remove:
+                        self.session.bye = None
 
         select.callback = remove_users
         return select
