@@ -60,14 +60,14 @@ if __name__ == '__main__':
 
 
     @bot.hybrid_command(name="leaderboard", description="Get the current leaderboard for your server.")
-    async def elo(ctx):
+    async def leaderboard(ctx):
         rank = 1
         database.server_id = ctx.guild.id
-        leaderboard = database.get_leaderboard()
+        server_leaderboard = database.get_leaderboard()
         embed = discord.Embed(title=f"Leaderboard",
                               description="",
                               color=0x24bc9c)
-        for user in leaderboard:
+        for user in server_leaderboard:
             embed.add_field(name=f"`{' ' * 10}Rank {rank}{' ' * (10 - len(str(user[0])))}`",
                             value=f"> {user[1]}\n> {user[2]}",
                             inline=False)
