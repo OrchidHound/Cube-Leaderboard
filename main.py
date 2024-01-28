@@ -1,6 +1,8 @@
 from discord.ext import commands
-from scripts.view import HeadView
+import scripts.view as view
 from scripts.session import Session, assign_id
+from scripts.user import User
+from scripts.decorators import has_required_role
 import config
 import discord
 import scripts.sql as sql
@@ -17,23 +19,8 @@ if __name__ == '__main__':
     TOKEN = config.TOKEN
     bot = commands.Bot(command_prefix='>', intents=discord.Intents.all())
 
-    @bot.hybrid_command(name="new_session", description="Create a new game session.")
-    async def new_session(ctx, users_str: str):
-        users_str = users_str.split()
-        users = []
 
-        for user in users_str:
-            try:
-                user = await commands.UserConverter().convert(ctx, user)
-                users.append(user)
-            except commands.errors.UserNotFound:
-                users.append(user)
-
-        # List of users must be greater than 2
-        if len(users) < 2:
-            await ctx.send("You must provide at least 2 players!")
-            return
-
+    def new_session(ctx, users):
         # Get server information
         server = bot.get_guild(ctx.message.guild.id)
         # If the server is not currently in the active sessions, add it to the sessions
@@ -44,9 +31,110 @@ if __name__ == '__main__':
         # Add a new session
         session_id = assign_id(server_sessions)
         server_sessions.append(Session(server, users, session_id=session_id))
+        curr_session = next(session for session in server_sessions if session.session_id == session_id)
 
-        session_view = HeadView(server_sessions, next(session for session in server_sessions if session.session_id == session_id), ctx.channel)
+        return server_sessions, session_id, curr_session
+
+
+    @has_required_role()
+    @bot.hybrid_command(name="manual_match", description="Manually assign match results.")
+    async def manual_match(ctx, users_str: str, r1_winner, r2_winner=None, r3_winner=None):
+        users = [User(user) for user in users_str.split()]
+        user_names = [user.get_name() for user in users]
+        server = bot.get_guild(ctx.message.guild.id)
+        database.server_id = server.id
+        match = {'p1': user_names[0], 'p2': user_names[1],
+                 'r1_winner': r1_winner, 'r2_winner': r2_winner, 'r3_winner': r3_winner}
+        wins = {match['p1']: 0, match['p2']: 0}
+
+        for winner in [r1_winner, r2_winner, r3_winner]:
+            if winner is not None:
+                if winner not in [match['p1'], match['p2']]:
+                    await ctx.send("You must provide valid winners!")
+                    return
+                else:
+                    wins[winner] += 1
+
+        if wins[match['p1']] == wins[match['p2']]:
+            await ctx.send("You must provide a valid winner!")
+            return
+
+        for user in users:
+            database.set_user(user.get_name())
+
+        prior_scores = {user_names[0]: database.get_elo(user_names[0]), user_names[1]: database.get_elo(user_names[1])}
+        prior_ranks = {user_names[0]: database.get_rank(user_names[0]), user_names[1]: database.get_rank(user_names[1])}
+
+        database.adjust_score(p1=match['p1'],
+                              p2=match['p2'],
+                              match=match)
+
+        embed = discord.Embed(title=f"Match results for {user_names[0]} and {user_names[1]} "
+                                    f"have been updated.",
+                              description="",
+                              color=0x24bc9c)
+
+        for user in user_names:
+            embed.add_field(name=f"> {user}",
+                            value=f"\n> `{user}: {prior_scores[user]} -> {database.get_elo(user)}`"
+                                  f"\n> `Rank {prior_ranks[user]} -> {database.get_rank(user)}`",
+                            inline=False)
+
+        # Send a message confirming change
+        await ctx.send(embed=embed)
+
+
+    @has_required_role()
+    @bot.hybrid_command(name="new_game", description="Create a new game session.")
+    async def new_game(ctx, users_str: str):
+        users = [User(user) for user in users_str.split()]
+
+        # List of users must be greater than 2
+        if len(users) < 2:
+            await ctx.send("You must provide at least 2 players!")
+            return
+
+        server_sessions, session_id, curr_session = new_session(ctx, users)
+
+        session_view = view.RosterView(server_sessions, curr_session, ctx.channel)
         await session_view.send(ctx)
+
+
+    @has_required_role()
+    @bot.hybrid_command(name="cancel_session", description="Cancel a game session.")
+    async def cancel_session(ctx, session_id: int):
+        server_sessions = sessions[ctx.message.guild.id]
+        curr_session = next(session for session in server_sessions if session.session_id == session_id)
+        session_view = view.CancelView(server_sessions, curr_session, ctx.channel)
+        await session_view.send(ctx)
+
+
+    @has_required_role()
+    @bot.hybrid_command(name="create_seating", description="Create a seating chart for a game session.")
+    async def create_seating(ctx, session_id: int):
+        server_sessions = sessions[ctx.message.guild.id]
+        curr_session = next(session for session in server_sessions if session.session_id == session_id)
+        session_view = view.SeatingView(server_sessions, curr_session, ctx.channel)
+        await session_view.send(ctx)
+
+
+    @has_required_role()
+    @bot.hybrid_command(name="next_match", description="Generate the next match for the current session.")
+    async def next_match(ctx, session_id: int):
+        server_sessions = sessions[ctx.message.guild.id]
+        curr_session = next(session for session in server_sessions if session.session_id == session_id)
+        session_view = view.PairingView(server_sessions, curr_session, ctx.channel)
+        await session_view.send(ctx)
+
+
+    @has_required_role()
+    @bot.hybrid_command(name="match_winners", description="Input the winners for the current match.")
+    async def match_winners(ctx, session_id: int):
+        server_sessions = sessions[ctx.message.guild.id]
+        curr_session = next(session for session in server_sessions if session.session_id == session_id)
+        if not curr_session.active:
+            match_view = view.MatchView(server_sessions, curr_session, ctx.channel)
+            await match_view.send(ctx)
 
 
     @bot.hybrid_command(name="elo", description="Retrieve your current elo score.")
@@ -54,24 +142,24 @@ if __name__ == '__main__':
         database.server_id = ctx.guild.id
         database.set_user(ctx.author)
         embed = discord.Embed(title=f"{ctx.author.name}",
-                              description=f"Your elo score is {database.get_elo(ctx.author)}.",
+                              description=f"Your elo score is {database.get_elo(ctx.author)}.\n"
+                                          f"Your rank is {database.get_rank(ctx.author)}.",
                               color=0x24bc9c)
         await ctx.send(embed=embed)
 
 
     @bot.hybrid_command(name="leaderboard", description="Get the current leaderboard for your server.")
     async def leaderboard(ctx):
-        rank = 1
         database.server_id = ctx.guild.id
         server_leaderboard = database.get_leaderboard()
         embed = discord.Embed(title=f"Leaderboard",
                               description="",
                               color=0x24bc9c)
-        for user in server_leaderboard:
-            embed.add_field(name=f"`{' ' * 10}Rank {rank}{' ' * (10 - len(str(user[0])))}`",
-                            value=f"> {user[1]}\n> {user[2]}",
-                            inline=False)
-            rank += 1
+        for placement, value in server_leaderboard.items():
+            if placement <= 10:
+                embed.add_field(name=f"`{' ' * 10}Rank {placement}{' ' * (10 - len(str(placement)))}`",
+                                value=f"> {value['user']}\n> {value['elo']}",
+                                inline=False)
         await ctx.send(embed=embed)
 
     # Login confirmation

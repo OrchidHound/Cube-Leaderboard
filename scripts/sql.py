@@ -9,7 +9,6 @@ def connect(db_file):
 
     try:
         conn = sqlite3.connect(db_file)
-        print("SQLite3 Version " + sqlite3.version)
     except Error as e:
         print("Error: " + str(e))
 
@@ -52,6 +51,7 @@ class sql:
 
     def get_leaderboard(self):
         try:
+            leaderboard = {}
             self.c.execute(
                 f"""
                 SELECT elo_id, user_id, elo_score FROM elo_scores
@@ -60,9 +60,18 @@ class sql:
                 """,
                 (self.server_id,)
             )
-            return self.c.fetchall()
+            data = self.c.fetchall()
+            for rank, row in enumerate(data):
+                leaderboard[rank + 1] = {'user': row[1], 'elo': row[2]}
+            return leaderboard
         except Error as e:
             print('Error: ' + str(e))
+
+    def get_rank(self, user):
+        leaderboard = self.get_leaderboard()
+        for rank, row in leaderboard.items():
+            if row['user'] == str(user):
+                return rank
 
     def get_elo(self, user):
         try:
@@ -115,24 +124,35 @@ class sql:
         except Error as e:
             print('Error: ' + str(e))
 
-    def adjust_score(self, winner, loser, score_diff: int):
+    def adjust_score(self, p1, p2, match):
         def calc_expected_score(rating_a, rating_b):
             return 1 / (1 + 10 ** ((rating_b - rating_a) / 400))
 
         def calc_new_score(rating, expected_score, actual_score, k=32):
             return round(rating + k * (actual_score - expected_score))
 
-        winner_rating = self.get_elo(winner)
-        loser_rating = self.get_elo(loser)
+        p1_rating = self.get_elo(p1)
+        p2_rating = self.get_elo(p2)
 
         # Update the ELO of the winner and loser.
-        if winner and loser:
-            winner_expected_score = calc_expected_score(winner_rating, loser_rating)
-            loser_expected_score = calc_expected_score(loser_rating, winner_rating)
-            winner_new_score = calc_new_score(winner_rating, winner_expected_score, score_diff)
-            loser_new_score = calc_new_score(loser_rating, loser_expected_score, 0-score_diff)
-            self.set_elo(winner, winner_new_score)
-            self.set_elo(loser, loser_new_score)
+        if p1 and p2:
+            for round_winner in [match['r1_winner'], match['r2_winner'], match['r3_winner']]:
+                p1_expected_score = calc_expected_score(p1_rating, p2_rating)
+                p2_expected_score = calc_expected_score(p2_rating, p1_rating)
+
+                try:
+                    if round_winner == match['p1']:
+                        p1_new_score = calc_new_score(p1_rating, p1_expected_score, 1)
+                        p2_new_score = calc_new_score(p2_rating, p2_expected_score, 0)
+                        self.set_elo(p1, p1_new_score)
+                        self.set_elo(p2, p2_new_score)
+                    elif round_winner == match['p2']:
+                        p1_new_score = calc_new_score(p1_rating, p1_expected_score, 0)
+                        p2_new_score = calc_new_score(p2_rating, p2_expected_score, 1)
+                        self.set_elo(p1, p1_new_score)
+                        self.set_elo(p2, p2_new_score)
+                except TypeError:
+                    pass
 
 
 if __name__ == '__main__':

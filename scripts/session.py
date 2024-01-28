@@ -1,3 +1,4 @@
+from scripts.user import User
 import scripts.sql as sql
 import random
 
@@ -32,28 +33,9 @@ def get_session_users(session):
 
 
 class Session:
-    class User:
-        def __init__(self, user_info):
-            self.user_info = user_info
-            self.original_elo = 1200
-            self.record = {'wins': 0, 'losses': 0}
-            self.seat = 0
-
-        def get_wins(self):
-            return self.record['wins']
-
-        def get_losses(self):
-            return self.record['losses']
-
-        def get_name(self):
-            if type(self.user_info) == str:
-                return self.user_info
-            else:
-                return self.user_info.name
-
     def __init__(self, server, users, session_id):
         self.server = server
-        self.users = [self.User(user) for user in users]
+        self.users = users
         self.session_id = session_id
         self.players_to_remove = []
         self.removed_players = []
@@ -66,33 +48,24 @@ class Session:
         for user in self.users:
             self.database.set_user(user.get_name())
             user.original_elo = self.database.get_elo(user.get_name())
+            user.original_rank = self.database.get_rank(user.get_name())
 
     def update_winners(self):
         for match in self.matches[len(self.matches)].values():
-            match['p2'].record[match['p1']] = 0
-            match['p1'].record[match['p2']] = 0
+            match['p2'].record[match['p1']], match['p1'].record[match['p2']] = self.get_match_results(match)
             p1_score = match['p2'].record[match['p1']]
             p2_score = match['p1'].record[match['p2']]
-            for round_winner in [match['r1_winner'], match['r2_winner'], match['r3_winner']]:
-                try:
-                    if round_winner == match['p1']:
-                        p1_score += 1
-                    elif round_winner == match['p2']:
-                        p2_score += 1
-                except TypeError:
-                    pass
             if p1_score > p2_score:
                 match['p1'].record['wins'] += 1
                 match['p2'].record['losses'] += 1
-                self.database.adjust_score(winner=match['p1'].get_name(),
-                                           loser=match['p2'].get_name(),
-                                           score_diff=(p1_score - p2_score))
+
             elif p1_score < p2_score:
                 match['p2'].record['wins'] += 1
                 match['p1'].record['losses'] += 1
-                self.database.adjust_score(winner=match['p2'].get_name(),
-                                           loser=match['p1'].get_name(),
-                                           score_diff=(p2_score - p1_score))
+
+            self.database.adjust_score(p1=match['p1'].get_name(),
+                                       p2=match['p2'].get_name(),
+                                       match=match)
 
     def get_active_users(self):
         removed_player_names = [user.get_name() for user in self.removed_players]
@@ -120,6 +93,19 @@ class Session:
                         prior_opponents.append(pair['p1'])
                         break
         return prior_opponents
+
+    def get_match_results(self, match):
+        p1_wins = 0
+        p2_wins = 0
+        for round_winner in [match['r1_winner'], match['r2_winner'], match['r3_winner']]:
+            try:
+                if round_winner == match['p1']:
+                    p1_wins += 1
+                elif round_winner == match['p2']:
+                    p2_wins += 1
+            except TypeError:
+                pass
+        return p1_wins, p2_wins
 
     def set_game_winners(self, premature=False):
         winners = [user for user in self.get_active_users() if user.record['losses'] == 0]
