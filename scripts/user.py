@@ -1,3 +1,15 @@
+from discord.ext import commands
+
+
+async def convert(ctx, user_str):
+    try:
+        return await commands.MemberConverter().convert(ctx, user_str)
+    except commands.MemberNotFound:
+        return user_str
+    except TypeError:
+        return None
+
+
 class User:
     def __init__(self, user_info):
         self.user_info = user_info
@@ -19,7 +31,13 @@ class User:
         return self.record['losses']
 
     def get_name(self):
+        if self.user_info is None:
+            return None
+        return str(self.user_info)
+
+    def get_nick(self):
         if type(self.user_info) == str:
             return self.user_info
-        else:
-            return self.user_info.name
+        elif self.user_info.nick is None:
+            return str(self.user_info.display_name)
+        return str(self.user_info.nick)

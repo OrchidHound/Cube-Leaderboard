@@ -49,9 +49,9 @@ class RosterView(SessionView):
         self.embed.description = "Session contains these users:"
 
         for user in self.session.get_active_users():
-            spacing = ' ' * (self.session.longest - len(user.get_name()))
+            spacing = ' ' * (self.session.longest - len(user.get_nick()))
             self.embed.add_field(name="",
-                                 value=f"> `{user.get_name()}{spacing} "
+                                 value=f"> `{user.get_nick()}{spacing} "
                                        f"| {self.session.database.get_elo(user.get_name())}`",
                                  inline=False)
 
@@ -80,7 +80,7 @@ class SeatingView(SessionView):
         for seat_number in range(player_amt + 1):
             for user in self.session.get_active_users():
                 if user.seat == seat_number:
-                    self.embed.add_field(name=f"\n> Seat {user.seat} ", value=f"> `{user.get_name()}`", inline=False)
+                    self.embed.add_field(name=f"\n> Seat {user.seat} ", value=f"> `{user.get_nick()}`", inline=False)
 
         return self.embed
 
@@ -95,21 +95,21 @@ class PairingView(SessionView):
         bye_message = ""
         if self.session.bye is not None:
             bye_user = self.session.bye
-            bye_message = f"Since there are an odd number of players, {bye_user.get_name()} gets a bye.\n"
+            bye_message = f"Since there are an odd number of players, {bye_user.get_nick()} gets a bye.\n"
 
         self.embed.description = "It's time to play!\n" + \
                             bye_message + \
                             f"The match {len(self.session.matches)} pairings are:"
 
         for key, value in self.match.items():
-            left_spacing = ' ' * (self.session.longest - len(value['p1'].get_name()))
-            right_spacing = ' ' * (self.session.longest - len(value['p2'].get_name()))
+            left_spacing = ' ' * (self.session.longest - len(value['p1'].get_nick()))
+            right_spacing = ' ' * (self.session.longest - len(value['p2'].get_nick()))
             self.embed.add_field(name=f"",
                                  value=f"> "
-                                       f"`{value['p1'].get_name()} "
+                                       f"`{value['p1'].get_nick()} "
                                        f"( {value['p1'].get_wins()} / {value['p1'].get_losses()} ) "
                                        f"{left_spacing}  --VS--  {right_spacing}"
-                                       f"{value['p2'].get_name()} "
+                                       f"{value['p2'].get_nick()} "
                                        f"( {value['p2'].get_wins()} / {value['p2'].get_losses()} )`",
                                  inline=False)
 
@@ -140,15 +140,15 @@ class MatchView(SessionView):
         self.embed.clear_fields()
         self.embed.description = f"The match {len(self.session.matches)} results are as follows:\n"
         for pairing in self.session.matches[len(self.session.matches)].values():
-            left_spacing = ' ' * (self.session.longest - len(pairing['p1'].get_name()))
-            right_spacing = ' ' * (self.session.longest - len(pairing['p2'].get_name()))
+            left_spacing = ' ' * (self.session.longest - len(pairing['p1'].get_nick()))
+            right_spacing = ' ' * (self.session.longest - len(pairing['p2'].get_nick()))
             p1_wins, p2_wins = self.session.get_match_results(pairing)
             self.embed.add_field(name=f"",
                                  value=f"> "
-                                       f"`{pairing['p1'].get_name()} "
+                                       f"`{pairing['p1'].get_nick()} "
                                        f"( {p1_wins} ) "
                                        f"{left_spacing}  --VS--  {right_spacing}"
-                                       f"{pairing['p2'].get_name()} "
+                                       f"{pairing['p2'].get_nick()} "
                                        f"( {p2_wins} )`",
                                  inline=False)
         await self.message.edit(embed=self.embed, view=self)
@@ -165,8 +165,8 @@ class MatchView(SessionView):
                 p1_wins, p2_wins = self.session.get_match_results(pairing)
                 if p1_wins == p2_wins:
                     failed = True
-                    await self.ctx.send(f"Invalid round data for {pairing['p1'].get_name()} "
-                                        f"vs. {pairing['p2'].get_name()}.",
+                    await self.ctx.send(f"Invalid round data for {pairing['p1'].get_nick()} "
+                                        f"vs. {pairing['p2'].get_nick()}.",
                                         delete_after=10)
             if not failed:
                 self.session.update_winners()
@@ -190,7 +190,7 @@ class PairView(SessionView):
             self.add_item(listing)
 
     def create_embed(self):
-        return discord.Embed(title=f"{self.pair_info['p1'].get_name()} vs. {self.pair_info['p2'].get_name()}",
+        return discord.Embed(title=f"{self.pair_info['p1'].get_nick()} vs. {self.pair_info['p2'].get_nick()}",
                              color=0x24bc9c)
 
     def versus_listings(self):
@@ -200,8 +200,8 @@ class PairView(SessionView):
             p2 = self.pair_info['p2']
 
             initial_options = [
-                discord.SelectOption(label=f"{p1.get_name()}", value='p1'),
-                discord.SelectOption(label=f"{p2.get_name()}", value='p2')
+                discord.SelectOption(label=f"{p1.get_nick()}", value='p1'),
+                discord.SelectOption(label=f"{p2.get_nick()}", value='p2')
             ]
             if round_num > 1:
                 initial_options.append(discord.SelectOption(label="Draw", value='draw'))
@@ -232,12 +232,12 @@ class WinView(SessionView):
     def create_embed(self):
         if len(self.session.game_winners) > 1:
             self.embed.description = "Congratulations to the following players for winning!\n" \
-                                f"{', '.join([winner.get_name() for winner in self.session.game_winners])}"
+                                f"{', '.join([winner.get_nick() for winner in self.session.game_winners])}"
         else:
-            self.embed.description = f"Congratulations to {self.session.game_winners[0].get_name()} for winning!"
+            self.embed.description = f"Congratulations to {self.session.game_winners[0].get_nick()} for winning!"
 
         for user in self.session.users:
-            spacing = 25 - len(user.get_name())
+            spacing = 25 - len(user.get_nick())
             if spacing % 2 == 0:
                 left_spacing = ' ' * int(spacing / 2)
                 right_spacing = ' ' * int(spacing / 2)
@@ -248,7 +248,7 @@ class WinView(SessionView):
             new_elo, new_rank = self.session.database.get_elo(user.get_name()), \
                                 self.session.database.get_rank(user.get_name())
 
-            self.embed.add_field(name=f"`{left_spacing}{user.get_name()}{right_spacing}`",
+            self.embed.add_field(name=f"`{left_spacing}{user.get_nick()}{right_spacing}`",
                                  value=f"> `Wins/Losses: ( {user.get_wins()} / {user.get_losses()} )`"
                                        f"\n> `{user.original_elo} -> {new_elo}`\n"
                                        f"> `Rank {user.original_rank} -> {new_rank}`",

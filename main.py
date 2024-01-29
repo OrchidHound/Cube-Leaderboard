@@ -1,7 +1,7 @@
 from discord.ext import commands
 import scripts.view as view
 from scripts.session import Session, assign_id
-from scripts.user import User
+from scripts.user import User, convert
 from scripts.decorators import has_required_role
 import config
 import discord
@@ -39,21 +39,24 @@ if __name__ == '__main__':
     @has_required_role()
     @bot.hybrid_command(name="manual_match", description="Manually assign match results.")
     async def manual_match(ctx, users_str: str, r1_winner, r2_winner=None, r3_winner=None):
-        users = [User(user) for user in users_str.split()]
+        users = [User(await convert(ctx, user)) for user in users_str.split()]
         user_names = [user.get_name() for user in users]
         server = bot.get_guild(ctx.message.guild.id)
         database.server_id = server.id
         match = {'p1': user_names[0], 'p2': user_names[1],
-                 'r1_winner': r1_winner, 'r2_winner': r2_winner, 'r3_winner': r3_winner}
+                 'r1_winner': User(await convert(ctx, r1_winner)).get_name(),
+                 'r2_winner': User(await convert(ctx, r2_winner)).get_name() if r2_winner is not None else None,
+                 'r3_winner': User(await convert(ctx, r3_winner)).get_name() if r3_winner is not None else None}
         wins = {match['p1']: 0, match['p2']: 0}
 
         for winner in [r1_winner, r2_winner, r3_winner]:
-            if winner is not None:
-                if winner not in [match['p1'], match['p2']]:
+            winner = User(await convert(ctx, winner))
+            if winner.get_name() is not None:
+                if winner.get_name() not in [match['p1'], match['p2']]:
                     await ctx.send("You must provide valid winners!")
                     return
                 else:
-                    wins[winner] += 1
+                    wins[winner.get_name()] += 1
 
         if wins[match['p1']] == wins[match['p2']]:
             await ctx.send("You must provide a valid winner!")
@@ -69,15 +72,15 @@ if __name__ == '__main__':
                               p2=match['p2'],
                               match=match)
 
-        embed = discord.Embed(title=f"Match results for {user_names[0]} and {user_names[1]} "
+        embed = discord.Embed(title=f"Match results for {users[0].get_nick()} and {users[1].get_nick()} "
                                     f"have been updated.",
                               description="",
                               color=0x24bc9c)
 
-        for user in user_names:
-            embed.add_field(name=f"> {user}",
-                            value=f"\n> `{user}: {prior_scores[user]} -> {database.get_elo(user)}`"
-                                  f"\n> `Rank {prior_ranks[user]} -> {database.get_rank(user)}`",
+        for user in users:
+            embed.add_field(name=f"> {user.get_nick()}",
+                            value=f"\n> `Elo {prior_scores[user.get_name()]} -> {database.get_elo(user.get_name())}`"
+                                  f"\n> `Rank {prior_ranks[user.get_name()]} -> {database.get_rank(user.get_name())}`",
                             inline=False)
 
         # Send a message confirming change
@@ -87,7 +90,7 @@ if __name__ == '__main__':
     @has_required_role()
     @bot.hybrid_command(name="new_game", description="Create a new game session.")
     async def new_game(ctx, users_str: str):
-        users = [User(user) for user in users_str.split()]
+        users = [User(await convert(ctx, user)) for user in users_str.split()]
 
         # List of users must be greater than 2
         if len(users) < 2:
@@ -141,7 +144,7 @@ if __name__ == '__main__':
     async def elo(ctx):
         database.server_id = ctx.guild.id
         database.set_user(ctx.author)
-        embed = discord.Embed(title=f"{ctx.author.name}",
+        embed = discord.Embed(title=f"{ctx.author.nick}",
                               description=f"Your elo score is {database.get_elo(ctx.author)}.\n"
                                           f"Your rank is {database.get_rank(ctx.author)}.",
                               color=0x24bc9c)
@@ -157,8 +160,9 @@ if __name__ == '__main__':
                               color=0x24bc9c)
         for placement, value in server_leaderboard.items():
             if placement <= 10:
+                user = User(await convert(ctx, value['user']))
                 embed.add_field(name=f"`{' ' * 10}Rank {placement}{' ' * (10 - len(str(placement)))}`",
-                                value=f"> {value['user']}\n> {value['elo']}",
+                                value=f"> {user.get_nick()}\n> {value['elo']}",
                                 inline=False)
         await ctx.send(embed=embed)
 
