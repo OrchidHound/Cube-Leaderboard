@@ -37,7 +37,6 @@ class Session:
         self.server = server
         self.users = users
         self.session_id = session_id
-        self.players_to_remove = []
         self.removed_players = []
         self.database = sql.sql(server_id=self.server.id)
         self.game_winners = None
@@ -77,8 +76,8 @@ class Session:
     def get_longest_user_name(self):
         longest_name = 0
         for user in self.users:
-            if len(user.get_name()) > longest_name:
-                longest_name = len(user.get_name())
+            if len(user.get_nick()) > longest_name:
+                longest_name = len(user.get_nick())
         return longest_name
 
     def get_prior_opponents(self, player):
@@ -134,6 +133,15 @@ class Session:
             pair_info['p1'] = p1
             pair_info['p2'] = p2
             pair_info["r1_winner"], pair_info["r2_winner"], pair_info["r3_winner"] = None, None, None
+
+    def drop_users(self, users):
+        for user_to_remove in users:
+            for active_user in self.get_active_users():
+                if active_user.get_name() == user_to_remove.get_name():
+                    self.removed_players.append(active_user)
+            if self.bye is not None:
+                if self.bye.get_name() == user_to_remove.get_name():
+                    self.bye = None
 
     def new_match(self):
         valid = False

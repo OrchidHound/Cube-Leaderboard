@@ -139,6 +139,21 @@ if __name__ == '__main__':
             match_view = view.MatchView(server_sessions, curr_session, ctx.channel)
             await match_view.send(ctx)
 
+    # Drop a user from the current session
+    @has_required_role()
+    @bot.hybrid_command(name="drop_users", description="Drop a user from the current session.")
+    async def drop_users(ctx, session_id: int, users_str: str):
+        server_sessions = sessions[ctx.message.guild.id]
+        curr_session = next(session for session in server_sessions if session.session_id == session_id)
+        users = [User(await convert(ctx, user)) for user in users_str.split()]
+        for user in users:
+            if user.get_name() not in [user.get_name() for user in curr_session.get_active_users()]:
+                await ctx.send("You must only provide users who are actively in the session!")
+                return
+        curr_session.drop_users(users)
+        session_view = view.RosterView(server_sessions, curr_session, ctx.channel)
+        await session_view.send(ctx)
+
 
     @bot.hybrid_command(name="elo", description="Retrieve your current elo score.")
     async def elo(ctx):

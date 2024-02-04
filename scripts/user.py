@@ -37,7 +37,13 @@ class User:
 
     def get_nick(self):
         if type(self.user_info) == str:
-            return self.user_info
+            nick = self.user_info
         elif self.user_info.nick is None:
-            return str(self.user_info.display_name)
-        return str(self.user_info.nick)
+            nick = str(self.user_info.display_name)
+        else:
+            nick = str(self.user_info.nick)
+
+        if len(nick) > 19:
+            nick = nick[:19]
+
+        return nick
