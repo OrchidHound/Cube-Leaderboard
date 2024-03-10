@@ -93,8 +93,8 @@ if __name__ == '__main__':
         users = [User(await convert(ctx, user)) for user in users_str.split()]
 
         # List of users must be greater than 2
-        if len(users) < 2:
-            await ctx.send("You must provide at least 2 players!")
+        if len(users) < 4:
+            await ctx.send("You must provide at least 4 players!")
             return
 
         server_sessions, session_id, curr_session = new_session(ctx, users)

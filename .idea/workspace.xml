@@ -8,7 +8,7 @@
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/main.py" beforeDir="false" afterPath="$PROJECT_DIR$/main.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/scripts/session.py" beforeDir="false" afterPath="$PROJECT_DIR$/scripts/session.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/scripts/user.py" beforeDir="false" afterPath="$PROJECT_DIR$/scripts/user.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/scripts/sql.py" beforeDir="false" afterPath="$PROJECT_DIR$/scripts/sql.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -138,15 +138,5 @@
         </entry>
       </map>
     </option>
-  </component>
-  <component name="XDebuggerManager">
-    <watches-manager>
-      <configuration name="PythonConfigurationType">
-        <watch expression="self.session.users" language="Python" />
-        <watch expression="self.session.get_active_users()" language="Python" />
-        <watch expression="self.session.players_to_remove" language="Python" />
-        <watch expression="self.session.removed_players" language="Python" />
-      </configuration>
-    </watches-manager>
   </component>
 </project>

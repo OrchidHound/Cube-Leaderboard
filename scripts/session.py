@@ -54,10 +54,10 @@ class Session:
             match['p2'].record[match['p1']], match['p1'].record[match['p2']] = self.get_match_results(match)
             p1_score = match['p2'].record[match['p1']]
             p2_score = match['p1'].record[match['p2']]
+
             if p1_score > p2_score:
                 match['p1'].record['wins'] += 1
                 match['p2'].record['losses'] += 1
-
             elif p1_score < p2_score:
                 match['p2'].record['wins'] += 1
                 match['p1'].record['losses'] += 1
@@ -108,19 +108,24 @@ class Session:
 
     def set_game_winners(self, premature=False):
         winners = [user for user in self.get_active_users() if user.record['losses'] == 0]
-        if premature:
+        if premature or len(winners) == 1:
             self.game_winners = winners
-        elif len(winners) == 1:
-            self.game_winners = winners
+            for user in self.users:
+                self.database.increment_games_played(user.get_name())
         else:
             self.game_winners = None
 
     def match_players(self, current_player, player_list):
         prior_opponents = self.get_prior_opponents(current_player)
         try:
-            matched_player = random.choice(
-                [user for user in player_list if user not in prior_opponents]
-            )
+            if len(self.matches) == 1:
+                matched_player = random.choice(
+                    [user for user in player_list if abs(user.seat - current_player.seat) != 1]
+                )
+            else:
+                matched_player = random.choice(
+                    [user for user in player_list if user not in prior_opponents]
+                )
             player_list.remove(matched_player)
             return matched_player, True
         except IndexError:

@@ -25,7 +25,8 @@ class sql:
             self.c.execute(
                 """
                 CREATE TABLE IF NOT EXISTS Users (
-                    user_id TEXT PRIMARY KEY
+                    user_id TEXT PRIMARY KEY,
+                    games_played INTEGER
                 );
                 """
             )
@@ -54,9 +55,12 @@ class sql:
             leaderboard = {}
             self.c.execute(
                 f"""
-                SELECT elo_id, user_id, elo_score FROM elo_scores
-                WHERE server_id = ?
-                ORDER BY elo_score DESC
+                SELECT e.elo_id, e.user_id, e.elo_score 
+                FROM elo_scores AS e
+                JOIN Users AS u ON e.user_id = u.user_id
+                WHERE e.server_id = ? 
+                AND u.games_played >= 3
+                ORDER BY e.elo_score DESC
                 """,
                 (self.server_id,)
             )
@@ -108,8 +112,8 @@ class sql:
         try:
             self.c.execute(
                 f"""
-                INSERT OR IGNORE INTO Users (user_id)
-                VALUES (?)
+                INSERT OR IGNORE INTO Users (user_id, games_played)
+                VALUES (?, 0)
                 """,
                 (str(user),)
             )
@@ -131,12 +135,11 @@ class sql:
         def calc_new_score(rating, expected_score, actual_score, k=32):
             return round(rating + k * (actual_score - expected_score))
 
-        p1_rating = self.get_elo(p1)
-        p2_rating = self.get_elo(p2)
-
         # Update the ELO of the winner and loser.
         if p1 and p2:
             for round_winner in [match['r1_winner'], match['r2_winner'], match['r3_winner']]:
+                p1_rating = self.get_elo(p1)
+                p2_rating = self.get_elo(p2)
                 p1_expected_score = calc_expected_score(p1_rating, p2_rating)
                 p2_expected_score = calc_expected_score(p2_rating, p1_rating)
 
@@ -153,6 +156,20 @@ class sql:
                         self.set_elo(p2, p2_new_score)
                 except TypeError:
                     pass
+
+    def increment_games_played(self, user):
+        try:
+            self.c.execute(
+                f"""
+                UPDATE Users
+                SET games_played = games_played + 1
+                WHERE user_id = ?
+                """,
+                (str(user),)
+            )
+            self.conn.commit()
+        except Error as e:
+            print('Error: ' + str(e))
 
 
 if __name__ == '__main__':
