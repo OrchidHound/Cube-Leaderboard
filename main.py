@@ -1,11 +1,11 @@
 from discord.ext import commands
-import scripts.view as view
-from scripts.session import Session, assign_id
-from scripts.user import User, convert
-from scripts.decorators import has_required_role
+import bot.view as view
+from bot.session import Session, assign_id
+from bot.user import User, convert
+from bot.decorators import has_required_role
 import config
 import discord
-import scripts.sql as sql
+import bot.sql as sql
 
 
 if __name__ == '__main__':
@@ -20,7 +20,13 @@ if __name__ == '__main__':
     bot = commands.Bot(command_prefix='>', intents=discord.Intents.all())
 
 
-    def new_session(ctx, users):
+    def new_session(ctx, users, three_rounds):
+        # Determine if the user would like to set the match to three rounds regardless of player amount
+        if three_rounds.lower() in ['t', 'true', 'y', 'yes']:
+            three_rounds = True
+        else:
+            three_rounds = False
+
         # Get server information
         server = bot.get_guild(ctx.message.guild.id)
         # If the server is not currently in the active sessions, add it to the sessions
@@ -30,8 +36,8 @@ if __name__ == '__main__':
         server_sessions = sessions[ctx.message.guild.id]
         # Add a new session
         session_id = assign_id(server_sessions)
-        server_sessions.append(Session(server, users, session_id=session_id))
-        curr_session = next(session for session in server_sessions if session.session_id == session_id)
+        server_sessions.append(Session(server, users, session_id=session_id, three_rounds=three_rounds))
+        curr_session = server_sessions[0]
 
         return server_sessions, session_id, curr_session
 
@@ -89,15 +95,15 @@ if __name__ == '__main__':
 
     @has_required_role()
     @bot.hybrid_command(name="new_game", description="Create a new game session.")
-    async def new_game(ctx, users_str: str):
+    async def new_game(ctx, users_str: str, three_rounds: str = 't'):
         users = [User(await convert(ctx, user)) for user in users_str.split()]
 
-        # List of users must be greater than 2
+        # List of users must be greater than 4
         if len(users) < 4:
             await ctx.send("You must provide at least 4 players!")
             return
 
-        server_sessions, session_id, curr_session = new_session(ctx, users)
+        server_sessions, session_id, curr_session = new_session(ctx, users, three_rounds)
 
         session_view = view.RosterView(server_sessions, curr_session, ctx.channel)
         await session_view.send(ctx)
@@ -105,36 +111,36 @@ if __name__ == '__main__':
 
     @has_required_role()
     @bot.hybrid_command(name="cancel_session", description="Cancel a game session.")
-    async def cancel_session(ctx, session_id: int):
+    async def cancel_session(ctx):
         server_sessions = sessions[ctx.message.guild.id]
-        curr_session = next(session for session in server_sessions if session.session_id == session_id)
+        curr_session = server_sessions[0]
         session_view = view.CancelView(server_sessions, curr_session, ctx.channel)
         await session_view.send(ctx)
 
 
     @has_required_role()
     @bot.hybrid_command(name="create_seating", description="Create a seating chart for a game session.")
-    async def create_seating(ctx, session_id: int):
+    async def create_seating(ctx):
         server_sessions = sessions[ctx.message.guild.id]
-        curr_session = next(session for session in server_sessions if session.session_id == session_id)
+        curr_session = server_sessions[0]
         session_view = view.SeatingView(server_sessions, curr_session, ctx.channel)
         await session_view.send(ctx)
 
 
     @has_required_role()
     @bot.hybrid_command(name="next_match", description="Generate the next match for the current session.")
-    async def next_match(ctx, session_id: int):
+    async def next_match(ctx):
         server_sessions = sessions[ctx.message.guild.id]
-        curr_session = next(session for session in server_sessions if session.session_id == session_id)
+        curr_session = server_sessions[0]
         session_view = view.PairingView(server_sessions, curr_session, ctx.channel)
         await session_view.send(ctx)
 
 
     @has_required_role()
     @bot.hybrid_command(name="match_winners", description="Input the winners for the current match.")
-    async def match_winners(ctx, session_id: int):
+    async def match_winners(ctx):
         server_sessions = sessions[ctx.message.guild.id]
-        curr_session = next(session for session in server_sessions if session.session_id == session_id)
+        curr_session = server_sessions[0]
         if not curr_session.active:
             match_view = view.MatchView(server_sessions, curr_session, ctx.channel)
             await match_view.send(ctx)
@@ -142,9 +148,9 @@ if __name__ == '__main__':
     # Drop a user from the current session
     @has_required_role()
     @bot.hybrid_command(name="drop_users", description="Drop a user from the current session.")
-    async def drop_users(ctx, session_id: int, users_str: str):
+    async def drop_users(ctx, users_str: str):
         server_sessions = sessions[ctx.message.guild.id]
-        curr_session = next(session for session in server_sessions if session.session_id == session_id)
+        curr_session = server_sessions[0]
         users = [User(await convert(ctx, user)) for user in users_str.split()]
         for user in users:
             if user.get_name() not in [user.get_name() for user in curr_session.get_active_users()]:

@@ -1,6 +1,7 @@
-from scripts.user import User
-import scripts.sql as sql
+from bot.user import User
+import bot.sql as sql
 import random
+from datetime import datetime
 
 
 def assign_id(session_list):
@@ -33,7 +34,7 @@ def get_session_users(session):
 
 
 class Session:
-    def __init__(self, server, users, session_id):
+    def __init__(self, server, users, session_id, three_rounds):
         self.server = server
         self.users = users
         self.session_id = session_id
@@ -44,6 +45,8 @@ class Session:
         self.active = []
         self.bye = None
         self.longest = self.get_longest_user_name()
+        self.three_rounds = three_rounds
+        self.datetime = datetime.now().strftime("%d/%m/%Y %H:%M")
         for user in self.users:
             self.database.set_user(user.get_name())
             user.original_elo = self.database.get_elo(user.get_name())
@@ -108,7 +111,8 @@ class Session:
 
     def set_game_winners(self, premature=False):
         winners = [user for user in self.get_active_users() if user.record['losses'] == 0]
-        if premature or len(winners) == 1:
+        if premature or (len(winners) == 1 and self.three_rounds is False) or \
+                (self.three_rounds is True and len(self.matches) == 3):
             self.game_winners = winners
             for user in self.users:
                 self.database.increment_games_played(user.get_name())
@@ -178,6 +182,9 @@ class Session:
 
                 if len(unassigned_winners) == 1 and not unassigned_losers[1]:
                     self.bye = unassigned_winners.pop()
+
+                if matched_player is None:
+                    matched_player = random.choice(unassigned_losers[1])
 
                 self.create_match_pair(match_num, current_player, matched_player)
 
