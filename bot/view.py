@@ -5,7 +5,7 @@ import discord
 
 class SessionView(discord.ui.View):
     def __init__(self, session_list, session, ctx):
-        super().__init__(timeout=600)
+        super().__init__(timeout=None)
         self.session_list = session_list
         self.session = session
         self.ctx = ctx
@@ -114,18 +114,15 @@ class PairingView(SessionView):
                             f"The match {len(self.session.matches)} pairings are:"
 
         for key, value in self.match.items():
-            # left_spacing = ' ' * (self.session.longest - len(value['p1'].get_nick()))
-            # right_spacing = ' ' * (self.session.longest - len(value['p2'].get_nick()))
             self.embed.add_field(name=f"",
-                                 value=f"> "
-                                       f"`{value['p1'].get_nick()} {self.spacing(value['p1'].get_nick())}"
-                                       f"( {value['p1'].get_wins()} / {value['p1'].get_losses()} )`"
-                                       f"\n> ` `\n"
-                                       f"> `{' ' * ((self.session.longest + 4) // 2)}--VS--`"
-                                       f"\n> ` `\n"
-                                       f"> `{value['p2'].get_nick()} {self.spacing(value['p2'].get_nick())}"
-                                       f"( {value['p2'].get_wins()} / {value['p2'].get_losses()} )`"
-                                       f"\n> `{'_' * (self.session.longest + 10)}`",
+                                 value=f"```{value['p1'].get_nick()} {self.spacing(value['p1'].get_nick())}"
+                                       f"( {value['p1'].get_wins()} / {value['p1'].get_losses()} )"
+                                       f"\n\n"
+                                       f"{' ' * ((self.session.longest + 4) // 2)}--VS--"
+                                       f"\n\n"
+                                       f"{value['p2'].get_nick()} {self.spacing(value['p2'].get_nick())}"
+                                       f"( {value['p2'].get_wins()} / {value['p2'].get_losses()} )"
+                                       f"\n{'_' * (self.session.longest + 10)}```",
                                  inline=False)
 
         return self.embed
@@ -159,18 +156,16 @@ class MatchView(SessionView):
         self.embed.clear_fields()
         self.embed.description = f"The match {len(self.session.matches)} results are as follows:\n"
         for pairing in self.session.matches[len(self.session.matches)].values():
-            # left_spacing = ' ' * (self.session.longest - len(pairing['p1'].get_nick()))
-            # right_spacing = ' ' * (self.session.longest - len(pairing['p2'].get_nick()))
             p1_wins, p2_wins = self.session.get_match_results(pairing)
             self.embed.add_field(name=f"",
-                                 value=f"> `{pairing['p1'].get_nick()} {self.spacing(pairing['p1'].get_nick())} "
-                                       f"( {p1_wins} ) `"
-                                       f"\n> ` `\n"
-                                       f"> `{' ' * ((self.session.longest + 2) // 2)}--VS--`"
-                                       f"\n> ` `\n"
-                                       f"> `{pairing['p2'].get_nick()} {self.spacing(pairing['p2'].get_nick())} "
-                                       f"( {p2_wins} )`"
-                                       f"\n> `{'_' * (self.session.longest + 7)}`",
+                                 value=f"```{pairing['p1'].get_nick()} {self.spacing(pairing['p1'].get_nick())} "
+                                       f"( {p1_wins} ) "
+                                       f"\n\n"
+                                       f"{' ' * ((self.session.longest + 2) // 2)}--VS--"
+                                       f"\n\n"
+                                       f"{pairing['p2'].get_nick()} {self.spacing(pairing['p2'].get_nick())} "
+                                       f"( {p2_wins} )"
+                                       f"\n{'_' * (self.session.longest + 7)}```",
                                  inline=False)
         await self.message.edit(embed=self.embed, view=self)
 

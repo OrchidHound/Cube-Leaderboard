@@ -102,6 +102,10 @@ if __name__ == '__main__':
         if len(users) < 4:
             await ctx.send("You must provide at least 4 players!")
             return
+        # Check for any active sessions
+        if len(sessions) > 0:
+            await ctx.send("A session is already active. Please cancel that session before starting a new one.")
+            return
 
         server_sessions, session_id, curr_session = new_session(ctx, users, three_rounds)
 
