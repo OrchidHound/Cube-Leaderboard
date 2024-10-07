@@ -16,15 +16,14 @@ def connect(db_file):
 
 
 class sql:
-    def __init__(self, server_id: int):
+    def __init__(self):
         self.conn, self.c = connect(db_file=pathlib.Path(__file__).parent.parent / 'cube_leaderboard.db')
-        self.server_id = server_id
 
     def create_tables(self):
         try:
             self.c.execute(
                 """
-                CREATE TABLE IF NOT EXISTS Users (
+                CREATE TABLE IF NOT EXISTS users (
                     user_id TEXT PRIMARY KEY,
                     games_played INTEGER
                 );
@@ -36,10 +35,18 @@ class sql:
                 CREATE TABLE elo_scores (
                     elo_id INTEGER PRIMARY KEY,
                     user_id TEXT,
-                    server_id INTEGER,
                     elo_score INTEGER,
                     FOREIGN KEY (user_id) REFERENCES users(user_id),
-                    UNIQUE(user_id, server_id)
+                    UNIQUE(user_id)
+                );
+                """
+            )
+
+            self.c.execute(
+                """
+                CREATE TABLE session_logs (
+                    date TEXT PRIMARY KEY,
+                    log_data TEXT
                 );
                 """
             )
@@ -47,29 +54,27 @@ class sql:
             self.conn.commit()
             return True
         except Error as e:
-            print('Error initializing databases: ' + str(e))
+            print('Create tables error: ' + str(e))
             return False
 
     def get_leaderboard(self):
         try:
             leaderboard = {}
             self.c.execute(
-                f"""
+                """
                 SELECT e.elo_id, e.user_id, e.elo_score 
                 FROM elo_scores AS e
-                JOIN Users AS u ON e.user_id = u.user_id
-                WHERE e.server_id = ? 
-                AND u.games_played >= 3
+                JOIN users AS u ON e.user_id = u.user_id
+                WHERE u.games_played >= 3
                 ORDER BY e.elo_score DESC
-                """,
-                (self.server_id,)
+                """
             )
             data = self.c.fetchall()
             for rank, row in enumerate(data):
                 leaderboard[rank + 1] = {'user': row[1], 'elo': row[2]}
             return leaderboard
         except Error as e:
-            print('Error: ' + str(e))
+            print('Get leaderboard error: ' + str(e))
 
     def get_rank(self, user):
         leaderboard = self.get_leaderboard()
@@ -82,9 +87,9 @@ class sql:
             self.c.execute(
                 f"""
                 SELECT elo_score FROM elo_scores
-                WHERE user_id = ? AND server_id = ?
+                WHERE user_id = ?
                 """,
-                (str(user), self.server_id)
+                (str(user),)
             )
             record = self.c.fetchone()
             if record:
@@ -92,7 +97,7 @@ class sql:
             else:
                 return 1200
         except Error as e:
-            print('Error: ' + str(e))
+            print('Get elo error: ' + str(e))
 
     def set_elo(self, user, elo):
         try:
@@ -100,33 +105,46 @@ class sql:
                 f"""
                 UPDATE elo_scores
                 SET elo_score = ?
-                WHERE user_id = ? AND server_id = ?
+                WHERE user_id = ?
                 """,
-                (elo, str(user), self.server_id)
+                (elo, str(user))
             )
             self.conn.commit()
         except Error as e:
-            print('Error: ' + str(e))
+            print('Set elo error: ' + str(e))
 
     def set_user(self, user):
         try:
             self.c.execute(
                 f"""
-                INSERT OR IGNORE INTO Users (user_id, games_played)
+                INSERT OR IGNORE INTO users (user_id, games_played)
                 VALUES (?, 0)
                 """,
                 (str(user),)
             )
             self.c.execute(
                 f"""
-                INSERT OR IGNORE INTO elo_scores (user_id, server_id, elo_score)
-                VALUES (?, ?, ?)
+                INSERT OR IGNORE INTO elo_scores (user_id, elo_score)
+                VALUES (?, ?)
                 """,
-                (str(user), self.server_id, 1200)
+                (str(user), 1200)
             )
             self.conn.commit()
         except Error as e:
-            print('Error: ' + str(e))
+            print('Set user error: ' + str(e))
+
+    def set_log(self, log):
+        try:
+            self.c.execute(
+                f"""
+                INSERT OR IGNORE INTO session_logs (date, log_data)
+                VALUES (DATETIME('now'), ?)
+                """,
+                (str(log),)
+            )
+            self.conn.commit()
+        except Error as e:
+            print('Log error: ' + str(e))
 
     def adjust_score(self, p1, p2, match):
         def calc_expected_score(rating_a, rating_b):
@@ -161,7 +179,7 @@ class sql:
         try:
             self.c.execute(
                 f"""
-                UPDATE Users
+                UPDATE users
                 SET games_played = games_played + 1
                 WHERE user_id = ?
                 """,
@@ -169,9 +187,9 @@ class sql:
             )
             self.conn.commit()
         except Error as e:
-            print('Error: ' + str(e))
+            print('Increment error: ' + str(e))
 
 
 if __name__ == '__main__':
-    database = sql(server_id=0)
+    database = sql()
     database.create_tables()

@@ -4,9 +4,8 @@ import discord
 
 
 class SessionView(discord.ui.View):
-    def __init__(self, session_list, session, ctx):
+    def __init__(self, session, ctx):
         super().__init__(timeout=None)
-        self.session_list = session_list
         self.session = session
         self.ctx = ctx
         self.message = ""
@@ -34,13 +33,11 @@ class SessionView(discord.ui.View):
 
 
 class CancelView(SessionView):
-    def __init__(self, session_list, session, ctx):
-        super().__init__(session_list=session_list, session=session, ctx=ctx)
+    def __init__(self, session, ctx):
+        super().__init__(session=session, ctx=ctx)
 
     def create_embed(self):
-        for session in self.session_list:
-            if session.session_id == self.session.session_id:
-                self.session_list.remove(session)
+        # TODO: Cancel session
 
         self.embed.title = ""
         self.embed.description = f"Session {self.session.session_id} cancelled."
@@ -49,8 +46,8 @@ class CancelView(SessionView):
 
 
 class RosterView(SessionView):
-    def __init__(self, session_list, session, ctx):
-        super().__init__(session_list=session_list, session=session, ctx=ctx)
+    def __init__(self, session, ctx):
+        super().__init__(session=session, ctx=ctx)
 
     def create_embed(self):
         self.embed.title = "Roster"
@@ -67,8 +64,8 @@ class RosterView(SessionView):
 
 
 class SeatingView(SessionView):
-    def __init__(self, session_list, session, ctx):
-        super().__init__(session_list=session_list, session=session, ctx=ctx)
+    def __init__(self, session, ctx):
+        super().__init__(session=session, ctx=ctx)
 
     def create_embed(self):
         self.embed.title = "Seating"
@@ -96,8 +93,8 @@ class SeatingView(SessionView):
 
 
 class PairingView(SessionView):
-    def __init__(self, session_list, session, ctx):
-        super().__init__(session_list=session_list, session=session, ctx=ctx)
+    def __init__(self, session, ctx):
+        super().__init__(session=session, ctx=ctx)
         self.match = None
 
     def create_embed(self):
@@ -125,20 +122,22 @@ class PairingView(SessionView):
                                        f"\n{'_' * (self.session.longest + 10)}```",
                                  inline=False)
 
+        for key, value in self.match.items():
+            pair_view = PairView(self.session, self.ctx, value, key)
+            self.session.active.append(pair_view)
+
         return self.embed
 
 
 class MatchView(SessionView):
-    def __init__(self, session_list, session, ctx):
-        super().__init__(session_list=session_list, session=session, ctx=ctx)
+    def __init__(self, session, ctx):
+        super().__init__(session=session, ctx=ctx)
         self.add_item(self.submit_match_button())
         self.match = self.session.matches[len(self.session.matches)]
 
     async def send(self, ctx):
         self.message = await ctx.send(embed=self.create_embed(), view=self)
-        for key, value in self.match.items():
-            pair_view = PairView(self.session_list, self.session, self.ctx, value, key)
-            self.session.active.append(pair_view)
+
         for pair_view in self.session.active:
             await pair_view.send(self.ctx)
         self.add_item(self.submit_match_button())
@@ -189,7 +188,7 @@ class MatchView(SessionView):
                 await self.session.delete_active_matches(self.ctx)
                 self.session.set_game_winners()
                 if self.session.game_winners is not None:
-                    win_view = WinView(self.session_list, self.session, self.ctx)
+                    win_view = WinView(self.session, self.ctx)
                     await win_view.send(self.ctx)
                 await self.update_message()
 
@@ -198,8 +197,8 @@ class MatchView(SessionView):
 
 
 class PairView(SessionView):
-    def __init__(self, session_list, session, ctx, pair_info, key):
-        super().__init__(session_list=session_list, session=session, ctx=ctx)
+    def __init__(self, session, ctx, pair_info, key):
+        super().__init__(session=session, ctx=ctx)
         self.pair_info = pair_info
         self.key = key
         for listing in self.versus_listings():
@@ -242,8 +241,36 @@ class PairView(SessionView):
 
 
 class WinView(SessionView):
-    def __init__(self, session_list, session, ctx):
-        super().__init__(session_list=session_list, session=session, ctx=ctx)
+    def __init__(self, session, ctx):
+        super().__init__(session=session, ctx=ctx)
+
+    def log_session(self):
+        log = ""
+
+        # User list
+        log += "UL:"
+        for user in self.session.users:
+            log += f"{user.get_nick()}\n"
+
+        # Match results
+        for match_number in range(len(self.session.matches)):
+            log += f"\n\nM{match_number+1}:"
+            for pairing in self.session.matches[len(self.session.matches)].values():
+                p1_wins, p2_wins = self.session.get_match_results(pairing)
+                log += f"{pairing['p1'].get_nick()}=={p1_wins}//{pairing['p2'].get_nick()}=={p2_wins}\n"
+
+        # Elo results
+        log += f"\n\nELO:"
+        for user in self.session.users:
+            log += f"{user.get_nick()}=={user.original_elo}//{self.session.database.get_elo(user.get_name())}\n"
+
+        # Rank results
+        log += f"\n\nRANK:"
+        for user in self.session.users:
+            log += f"{user.get_nick()}=={user.original_rank}//{self.session.database.get_rank(user.get_name())}\n"
+
+        # Record in database
+        self.session.database.set_log(log)
 
     def create_embed(self):
         self.embed.title = f"Winners"
@@ -273,8 +300,7 @@ class WinView(SessionView):
                                        f"\n> `{user.original_elo} -> {new_elo}`\n"
                                        f"> `Rank {user.original_rank} -> {new_rank}`",
                                  inline=False)
-        for session in self.session_list:
-            if session.session_id == self.session.session_id:
-                self.session_list.remove(session)
+
+        self.log_session()
 
         return self.embed

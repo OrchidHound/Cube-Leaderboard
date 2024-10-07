@@ -34,12 +34,11 @@ def get_session_users(session):
 
 
 class Session:
-    def __init__(self, server, users, session_id, three_rounds):
-        self.server = server
+    def __init__(self, users, three_rounds, channel_id):
+        self.channel_id = channel_id
         self.users = users
-        self.session_id = session_id
         self.removed_players = []
-        self.database = sql.sql(server_id=self.server.id)
+        self.database = sql.sql()
         self.game_winners = None
         self.matches = {}
         self.active = []
@@ -72,9 +71,6 @@ class Session:
     def get_active_users(self):
         removed_player_names = [user.get_name() for user in self.removed_players]
         return [user for user in self.users if user.get_name() not in removed_player_names]
-
-    def get_id(self):
-        return self.session_id
 
     def get_longest_user_name(self):
         longest_name = 0
@@ -184,7 +180,7 @@ class Session:
                     self.bye = unassigned_winners.pop()
 
                 if matched_player is None:
-                    matched_player = random.choice(unassigned_losers[1])
+                    matched_player = random.choice(unassigned_losers)
 
                 self.create_match_pair(match_num, current_player, matched_player)
 
