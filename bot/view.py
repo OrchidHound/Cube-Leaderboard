@@ -4,303 +4,328 @@ import discord
 
 
 class SessionView(discord.ui.View):
-    def __init__(self, session, ctx):
+    def __init__(self, ctx, session, session_id):
         super().__init__(timeout=None)
-        self.session = session
         self.ctx = ctx
-        self.message = ""
-        self.pairs = []
+        self.session = session
+        self.session_id = session_id
+        self.add_buttons([self.create_button("Generate Seating", "green", "seating", self.seating_callback)])
+        self.players_to_drop = []
         self.embed = discord.Embed(color=0x24bc9c)
         self.embed.set_footer(text=self.session.datetime)
         self.embed.set_image(url="https://cdn.discordapp.com/attachments/1186834070085316691/1226447322368577608/"
                                  "footer.png?ex=6624cd13&is=66125813&hm="
                                  "93d7af4b304e9a3c4026264aa311e4684e27df5d1057f07f4a57234eb9ca98b5&")
 
+    # Spacing for formatting names in Discord embeds
     def spacing(self, player_nick):
         return ' ' * (self.session.longest - len(player_nick))
 
-    async def send(self, ctx):
-        self.message = await ctx.send(embed=self.create_embed(), view=self)
-
-    async def update_message(self):
-        await self.message.edit(embed=self.create_embed(), view=self)
-
-    def create_embed(self):
-        return self.embed
-
-    def update_buttons(self):
-        pass
-
-
-class CancelView(SessionView):
-    def __init__(self, session, ctx):
-        super().__init__(session=session, ctx=ctx)
-
-    def create_embed(self):
-        # TODO: Cancel session
-
-        self.embed.title = ""
-        self.embed.description = f"Session {self.session.session_id} cancelled."
-
-        return self.embed
-
-
-class RosterView(SessionView):
-    def __init__(self, session, ctx):
-        super().__init__(session=session, ctx=ctx)
-
-    def create_embed(self):
-        self.embed.title = "Roster"
-        self.embed.description = "Session contains these users:"
-
-        for user in self.session.get_active_users():
-            spacing = ' ' * (self.session.longest - len(user.get_nick()))
-            self.embed.add_field(name="",
-                                 value=f"> `{user.get_nick()}{spacing} "
-                                       f"| {self.session.database.get_elo(user.get_name())}`",
-                                 inline=False)
-
-        return self.embed
-
-
-class SeatingView(SessionView):
-    def __init__(self, session, ctx):
-        super().__init__(session=session, ctx=ctx)
-
-    def create_embed(self):
-        self.embed.title = "Seating"
-
-        seats = list(range(1, len(self.session.get_active_users()) + 1))
-        player_amt = len(self.session.get_active_users())
-        pack_size = 15 if player_amt <= 8 else 15 + (player_amt - 8)
-        draft_warning = 'Since there are less than 8 players, consider using a house rule for drafting.\n'
-
-        self.embed.description = "Let's start drafting!\n" \
-                            f"Since there are {player_amt} players, each player will make 3 packs of " \
-                            f"{pack_size}.\n" \
-                            f"{draft_warning if player_amt < 8 else ''}" \
-                            "\nSeating order is as follows:"
-
-        for user in self.session.users:
-            user.seat = random.choice(seats)
-            seats.remove(user.seat)
-        for seat_number in range(player_amt + 1):
-            for user in self.session.get_active_users():
-                if user.seat == seat_number:
-                    self.embed.add_field(name=f"\n> Seat {user.seat} ", value=f"> `{user.get_nick()}`", inline=False)
-
-        return self.embed
-
-
-class PairingView(SessionView):
-    def __init__(self, session, ctx):
-        super().__init__(session=session, ctx=ctx)
-        self.match = None
-
-    def create_embed(self):
-        self.embed.title = f"Match {len(self.session.matches) + 1} Pairings"
-
-        self.match = self.session.new_match()
-        bye_message = ""
-        if self.session.bye is not None:
-            bye_user = self.session.bye
-            bye_message = f"Since there are an odd number of players, {bye_user.get_nick()} gets a bye.\n"
-
-        self.embed.description = "It's time to play!\n" + \
-                            bye_message + \
-                            f"The match {len(self.session.matches)} pairings are:"
-
-        for key, value in self.match.items():
-            self.embed.add_field(name=f"",
-                                 value=f"```{value['p1'].get_nick()} {self.spacing(value['p1'].get_nick())}"
-                                       f"( {value['p1'].get_wins()} / {value['p1'].get_losses()} )"
-                                       f"\n\n"
-                                       f"{' ' * ((self.session.longest + 4) // 2)}--VS--"
-                                       f"\n\n"
-                                       f"{value['p2'].get_nick()} {self.spacing(value['p2'].get_nick())}"
-                                       f"( {value['p2'].get_wins()} / {value['p2'].get_losses()} )"
-                                       f"\n{'_' * (self.session.longest + 10)}```",
-                                 inline=False)
-
-        for key, value in self.match.items():
-            pair_view = PairView(self.session, self.ctx, value, key)
-            self.session.active.append(pair_view)
-
-        return self.embed
-
-
-class MatchView(SessionView):
-    def __init__(self, session, ctx):
-        super().__init__(session=session, ctx=ctx)
-        self.add_item(self.submit_match_button())
-        self.match = self.session.matches[len(self.session.matches)]
-
-    async def send(self, ctx):
-        self.message = await ctx.send(embed=self.create_embed(), view=self)
-
-        for pair_view in self.session.active:
-            await pair_view.send(self.ctx)
-        self.add_item(self.submit_match_button())
-
-    def create_embed(self):
-        self.embed.title = f"Match {len(self.session.matches)} Input"
-
-        self.embed.description = f"Please input the results of match {len(self.session.matches)}."
-        return self.embed
-
-    async def update_message(self):
-        self.embed.title = f"Match {len(self.session.matches)} Results"
-
+    # Clear and add buttons to the view
+    def add_buttons(self, buttons):
         self.clear_items()
-        self.embed.clear_fields()
-        self.embed.description = f"The match {len(self.session.matches)} results are as follows:\n"
-        for pairing in self.session.matches[len(self.session.matches)].values():
-            p1_wins, p2_wins = self.session.get_match_results(pairing)
-            self.embed.add_field(name=f"",
-                                 value=f"```{pairing['p1'].get_nick()} {self.spacing(pairing['p1'].get_nick())} "
-                                       f"( {p1_wins} ) "
-                                       f"\n\n"
-                                       f"{' ' * ((self.session.longest + 2) // 2)}--VS--"
-                                       f"\n\n"
-                                       f"{pairing['p2'].get_nick()} {self.spacing(pairing['p2'].get_nick())} "
-                                       f"( {p2_wins} )"
-                                       f"\n{'_' * (self.session.longest + 7)}```",
-                                 inline=False)
-        await self.message.edit(embed=self.embed, view=self)
+        for button in buttons:
+            self.add_item(button)
+        self.add_item(self.create_button("Cancel", "red", "cancel", self.cancel_callback))
 
-    def submit_match_button(self):
-        button = discord.ui.Button(label="Submit",
-                                   style=discord.ButtonStyle.green)
-
-        @has_required_role()
-        async def submit_match(interaction):
-            failed = False
-            await interaction.response.defer()
-            for pairing in self.session.matches[len(self.session.matches)].values():
-                p1_wins, p2_wins = self.session.get_match_results(pairing)
-                if p1_wins == p2_wins:
-                    failed = True
-                    await self.ctx.send(f"Invalid round data for {pairing['p1'].get_nick()} "
-                                        f"vs. {pairing['p2'].get_nick()}.",
-                                        delete_after=10)
-            if not failed:
-                self.session.update_winners()
-                await self.session.delete_active_matches(self.ctx)
-                self.session.set_game_winners()
-                if self.session.game_winners is not None:
-                    win_view = WinView(self.session, self.ctx)
-                    await win_view.send(self.ctx)
-                await self.update_message()
-
-        button.callback = submit_match
+    # Create a button with specified parameters
+    def create_button(self, label, style, custom_id, custom_callback, disabled=False):
+        style = getattr(discord.ButtonStyle, style)
+        button = CallbackButton(
+            label=label,
+            style=style,
+            custom_id=custom_id,
+            custom_callback=custom_callback,
+            disabled=disabled)
         return button
 
+    # Embed for roster
+    def roster_embed(self):
+        self.embed.title = "Roster"
+        self.embed.description = "Session contains these users:"
+        # Format message for each player
+        for player in self.session.get_active_players():
+            spacing = ' ' * (self.session.longest - len(player.get_trimmed_nick()))
+            self.embed.add_field(
+                name="",
+                value=f"> `{player.get_trimmed_nick()}{spacing} | {player.original_elo}`",
+                inline=False)
+        return self.embed
 
-class PairView(SessionView):
-    def __init__(self, session, ctx, pair_info, key):
-        super().__init__(session=session, ctx=ctx)
-        self.pair_info = pair_info
-        self.key = key
-        for listing in self.versus_listings():
-            self.add_item(listing)
+    # Embed for seating order
+    def seating_embed(self):
+        self.embed.title = "Seating"
+        # Create a list of seats for the session
+        seats = list(range(1, len(self.session.get_active_players()) + 1))
+        player_amt = len(self.session.get_active_players())
+        # Set embed description
+        draft_warning = "Since there are less than 8 players, consider using a house rule for drafting.\n"
+        self.embed.description = \
+            f"""
+            Let's start drafting!\n
+            {draft_warning if player_amt < 8 else ''} \n
+            Seating order is as follows:
+            """
+        # Randomly assign seats to players
+        for player in self.session.players:
+            player.seat = random.choice(seats)
+            seats.remove(player.seat)
+        for seat_number in range(player_amt + 1):
+            for player in self.session.get_active_players():
+                if player.seat == seat_number:
+                    self.embed.add_field(
+                        name=f"\n> Seat {player.seat} ", value=f"> `{player.get_trimmed_nick()}`",
+                        inline=False)
+        return self.embed
 
-    def create_embed(self):
-        return discord.Embed(title=f"{self.pair_info['p1'].get_nick()} vs. {self.pair_info['p2'].get_nick()}",
-                             color=0x24bc9c)
+    # Embed for match pairings
+    def match_embed(self):
+        self.embed.title = f"Match {self.session.active_match_num+1} Pairings"
+        # Create a new match and store match info for easier access
+        self.session.new_match()
+        current_match = self.session.get_current_match()
+        match_num = self.session.active_match_num
+        # Create embed description and insert bye message if necessary
+        self.embed.description = \
+            f"""
+            It's time to play!\n
+            {f"Since there are an odd number of players, {current_match.bye.nick} gets a bye."
+            if current_match.bye is not None else ""}\n
+            The match {match_num} pairings are:
+            """
+        # Add an embed field for each pairing
+        for pairing in current_match.pairings:
+            p1_record = self.session.get_player_record(pairing.p1)
+            p2_record = self.session.get_player_record(pairing.p2)
+            self.embed.add_field(
+                name=f"",
+                value=(
+                    f"```{pairing.p1.get_trimmed_nick()} {self.spacing(pairing.p1.get_trimmed_nick())}"
+                    f"( {p1_record['wins']} / {p1_record['losses']} )\n\n"
+                    f"{' ' * ((self.session.longest + 2) // 2)}--VS--\n\n"
+                    f"{pairing.p2.get_trimmed_nick()} {self.spacing(pairing.p2.get_trimmed_nick())}"
+                    f"( {p2_record['wins']} / {p2_record['losses']} )\n"
+                    f"{'_' * (self.session.longest + 10)}```"),
+                inline=False)
+        return self.embed
 
-    def versus_listings(self):
-        select_menus = []
-        for round_num in [1, 2, 3]:
-            p1 = self.pair_info['p1']
-            p2 = self.pair_info['p2']
+    # Embed for intermission
+    def intermission_embed(self):
+        self.embed.title = "Intermission"
+        self.embed.description = "The current match has concluded. What would you like to do next?"
+        return self.embed
 
-            initial_options = [
-                discord.SelectOption(label=f"{p1.get_nick()}", value='p1'),
-                discord.SelectOption(label=f"{p2.get_nick()}", value='p2')
-            ]
-            if round_num > 1:
-                initial_options.append(discord.SelectOption(label="Draw", value='draw'))
+    # Embed for dropping users
+    def drop_users_embed(self):
+        self.embed.title = "Drop Users"
+        self.embed.description = "Which users would you like to drop from the session?"
+        return self.embed
 
-            select = discord.ui.Select(placeholder=f"Who won round {round_num}?",
-                                       min_values=1,
-                                       max_values=1,
-                                       options=initial_options)
-
-            async def update_match(interaction, round_num=round_num):
-                await interaction.response.defer()
-                if interaction.data['values'][0] == 'p1':
-                    self.pair_info[f'r{round_num}_winner'] = p1
-                elif interaction.data['values'][0] == 'p2':
-                    self.pair_info[f'r{round_num}_winner'] = p2
-                else:
-                    self.pair_info[f'r{round_num}_winner'] = 'draw'
-
-            select.callback = update_match
-            select_menus.append(select)
-        return select_menus
-
-
-class WinView(SessionView):
-    def __init__(self, session, ctx):
-        super().__init__(session=session, ctx=ctx)
-
-    def log_session(self):
-        log = ""
-
-        # User list
-        log += "UL:"
-        for user in self.session.users:
-            log += f"{user.get_nick()}\n"
-
-        # Match results
-        for match_number in range(len(self.session.matches)):
-            log += f"\n\nM{match_number+1}:"
-            for pairing in self.session.matches[len(self.session.matches)].values():
-                p1_wins, p2_wins = self.session.get_match_results(pairing)
-                log += f"{pairing['p1'].get_nick()}=={p1_wins}//{pairing['p2'].get_nick()}=={p2_wins}\n"
-
-        # Elo results
-        log += f"\n\nELO:"
-        for user in self.session.users:
-            log += f"{user.get_nick()}=={user.original_elo}//{self.session.database.get_elo(user.get_name())}\n"
-
-        # Rank results
-        log += f"\n\nRANK:"
-        for user in self.session.users:
-            log += f"{user.get_nick()}=={user.original_rank}//{self.session.database.get_rank(user.get_name())}\n"
-
-        # Record in database
-        self.session.database.set_log(log)
-
-    def create_embed(self):
-        self.embed.title = f"Winners"
-
-        if len(self.session.game_winners) > 1:
-            self.embed.description = "Congratulations to the following players for winning!\n" \
-                                f"{', '.join([winner.get_nick() for winner in self.session.game_winners])}"
-        elif len(self.session.game_winners) == 0:
-            self.embed.description = "Looks like nobody wins this session! Better luck next time!"
+    # Embed for winners
+    def winners_embed(self):
+        self.embed.title = "Winners"
+        self.clear_items()
+        if len(self.session.get_undefeated_players()) > 1:
+            self.embed.description = f"""
+                Congratulations to the following players for winning!\n
+                {", ".join([player.get_trimmed_nick() for player in self.session.get_undefeated_players()])}
+                """
+        elif len(self.session.get_undefeated_players()) == 1:
+            self.embed.description = f"""
+                Congratulations to {self.session.get_undefeated_players()[0].get_trimmed_nick()} for winning!
+                """
         else:
-            self.embed.description = f"Congratulations to {self.session.game_winners[0].get_nick()} for winning!"
+            self.embed.description = "Looks like nobody wins this session. Better luck next time!"
 
-        for user in self.session.users:
-            spacing = 25 - len(user.get_nick())
+        for player in self.session.players:
+            spacing = 25 - len(player.get_trimmed_nick())
             if spacing % 2 == 0:
                 left_spacing = ' ' * int(spacing / 2)
                 right_spacing = ' ' * int(spacing / 2)
             else:
                 left_spacing = ' ' * int(spacing / 2)
                 right_spacing = ' ' * (int(spacing / 2) + 1)
-
-            new_elo, new_rank = self.session.database.get_elo(user.get_name()), \
-                                self.session.database.get_rank(user.get_name())
-
-            self.embed.add_field(name=f"`{left_spacing}{user.get_nick()}{right_spacing}`",
-                                 value=f"> `Wins/Losses: ( {user.get_wins()} / {user.get_losses()} )`"
-                                       f"\n> `{user.original_elo} -> {new_elo}`\n"
-                                       f"> `Rank {user.original_rank} -> {new_rank}`",
-                                 inline=False)
-
-        self.log_session()
+            self.embed.add_field(
+                name=f"`{left_spacing}{player.get_trimmed_nick()}{right_spacing}`",
+                value=(
+                    f"> `Wins/Losses: ( {self.session.get_player_record(player)['wins']} "
+                    f"/ {self.session.get_player_record(player)['losses']} )`\n"
+                    f"> `{player.original_elo} -> {player.new_elo}`\n"
+                    f"> `Rank {player.original_rank} -> {player.new_rank}`"),
+                inline=False)
 
         return self.embed
+
+    # Embed for session cancellation
+    async def cancel_embed(self):
+        self.embed.title = "Session Cancelled"
+        self.embed.description = "The session has been cancelled."
+        return self.embed
+
+    # Callback for seating button
+    async def seating_callback(self, interaction, button: discord.ui.Button):
+        self.embed.clear_fields()
+        self.embed = self.seating_embed()
+        self.add_buttons([self.create_button("Start Match", "green", "next_match", self.next_match_callback)])
+        await interaction.response.edit_message(view=self, embed=self.embed)
+
+    # Callback for next match button
+    async def next_match_callback(self, interaction, button: discord.ui.Button):
+        self.embed.clear_fields()
+        self.embed = self.match_embed()
+        self.add_buttons([self.create_button("Enter Results", "green", "enter_results", self.enter_results_callback)])
+        await interaction.response.edit_message(view=self, embed=self.embed)
+
+    # Callback for enter results button
+    async def enter_results_callback(self, interaction, button: discord.ui.Button):
+        pairings = self.session.get_current_match().pairings
+        # Create a new view for each pairing in the current match
+        for i in range(len(pairings)):
+            pairing_view = PairView(pairings[i].p1, pairings[i].p2)
+            pairings[i].view = pairing_view
+            if i == 0:
+                await interaction.response.send_message(view=pairing_view)
+                response = await interaction.original_response()
+            else:
+                response = await interaction.followup.send(view=pairing_view)
+            pairing_view.response = response
+        self.add_buttons([self.create_button("Finalize", "green", "finalize", self.finalize_match_callback)])
+        await interaction.message.edit(view=self, embed=self.embed)
+
+    # Callback for finalize match button
+    async def finalize_match_callback(self, interaction, button: discord.ui.Button):
+        for pairing in self.session.get_current_match().pairings:
+            if pairing.view is not None:
+                pairing.wins = pairing.view.wins
+            if pairing.view is None or pairing.get_match_winner() is None:
+                await interaction.response.send_message(
+                    "Please enter results for all pairings before finalizing.",
+                    ephemeral=True
+                )
+                return
+        for pairing in self.session.get_current_match().pairings:
+            pairing.adjust_elo()
+            await pairing.view.response.delete()
+        self.session.log.add_match(self.session.get_current_match(), self.session.active_match_num)
+        self.embed.clear_fields()
+        if self.session.active_match_num < 3:
+            self.embed = self.intermission_embed()
+            self.add_buttons([
+                self.create_button("Next Match", "green", "next_match", self.next_match_callback),
+                self.create_button("Drop Users", "green", "drop_users", self.drop_users_callback)
+            ])
+        else:
+            self.session.commit_elo_scores()
+            self.session.commit_log()
+            self.embed = self.winners_embed()
+
+        await interaction.response.edit_message(view=self, embed=self.embed)
+
+    # Callback for drop users button
+    async def drop_users_callback(self, interaction, button: discord.ui.Button):
+        self.add_buttons([self.create_button("Finalize Drops", "green", "finalize_drops", self.finalize_drops_callback)])
+        selector = CallbackSelector(
+            placeholder="Select the users to drop",
+            min_values=0,
+            max_values=len(self.session.get_active_players()),
+            options=[
+                discord.SelectOption(
+                    label=f"{player.get_trimmed_nick()}",
+                    value=player.tag)
+                for player in self.session.get_active_players()],
+            custom_callback=self.selector_callback
+        )
+        self.add_item(selector)
+        self.embed.clear_fields()
+        self.embed = self.drop_users_embed()
+        await interaction.response.edit_message(view=self, embed=self.embed)
+
+    # Callback for finalize drops button
+    async def finalize_drops_callback(self, interaction, button: discord.ui.Button):
+        self.session.drop_players(self.players_to_drop)
+        self.players_to_drop.clear()
+        self.embed.clear_fields()
+        self.embed = self.intermission_embed()
+        self.add_buttons([
+            self.create_button("Next Match", "green", "next_match", self.next_match_callback),
+            self.create_button("Drop Users", "green", "drop_users", self.drop_users_callback)
+        ])
+        await interaction.response.edit_message(view=self, embed=self.embed)
+
+    # Callback for selector
+    async def selector_callback(self, interaction, select: discord.ui.Select):
+        await interaction.response.defer()
+        self.players_to_drop = select.values
+
+    # Callback for cancel button
+    async def cancel_callback(self, interaction, button: discord.ui.Button):
+        self.clear_items()
+        self.embed.clear_fields()
+        self.embed = await self.cancel_embed()
+        self.session.commit_log()
+        await interaction.response.edit_message(view=self, embed=self.embed)
+
+
+class PairView(discord.ui.View):
+    def __init__(self, p1, p2):
+        super().__init__(timeout=None)
+        self.p1 = p1
+        self.p2 = p2
+        self.wins = {p1: 0, p2: 0}
+        self.add_selector()
+        self.response = None
+
+    def add_selector(self):
+        selector = CallbackSelector(
+            placeholder="Select the winner",
+            min_values=1,
+            max_values=1,
+            options=[
+                discord.SelectOption(label=f"{self.p1.get_trimmed_nick()} wins 2-0", value="p1_2-0"),
+                discord.SelectOption(label=f"{self.p1.get_trimmed_nick()} wins 2-1", value="p1_2-1"),
+                discord.SelectOption(label=f"{self.p2.get_trimmed_nick()} wins 2-0", value="p2_2-0"),
+                discord.SelectOption(label=f"{self.p2.get_trimmed_nick()} wins 2-1", value="p2_2-1")
+            ],
+            custom_callback=self.selector_callback
+        )
+        self.add_item(selector)
+
+    async def selector_callback(self, interaction, select: discord.ui.Select):
+        await interaction.response.defer()
+        if select.values[0] == "p1_2-0":
+            self.wins[self.p1] = 2
+        elif select.values[0] == "p1_2-1":
+            self.wins[self.p1] = 2
+            self.wins[self.p2] = 1
+        elif select.values[0] == "p2_2-0":
+            self.wins[self.p2] = 2
+        elif select.values[0] == "p2_2-1":
+            self.wins[self.p2] = 2
+            self.wins[self.p1] = 1
+
+
+class CallbackButton(discord.ui.Button):
+    def __init__(self, *, label, style, custom_id, custom_callback, disabled=False):
+        super().__init__(
+            label=label,
+            style=style,
+            custom_id=custom_id,
+            disabled=disabled)
+        self.custom_callback = custom_callback
+
+    async def callback(self, interaction: discord.Interaction):
+        await self.custom_callback(interaction, self)
+
+
+class CallbackSelector(discord.ui.Select):
+    def __init__(self, *, placeholder, min_values, max_values, options, custom_callback, disabled=False):
+        super().__init__(
+            placeholder=placeholder,
+            min_values=min_values,
+            max_values=max_values,
+            options=options,
+            disabled=disabled)
+        self.custom_callback = custom_callback
+
+    async def callback(self, interaction: discord.Interaction):
+        await self.custom_callback(interaction, self)

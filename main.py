@@ -1,176 +1,74 @@
-from discord.ext import commands
-import bot.view as view
-from bot.session import Session, assign_id
-from bot.user import User, convert
-from bot.decorators import has_required_role
-import config
 import discord
-import bot.sql as sql
-
+import config
+import bot.database as database
+from discord.ext import commands
+from bot.view import SessionView
+from bot.player import Player
+from bot.decorators import has_required_role
+from bot.session import Session
 
 if __name__ == '__main__':
-    active_sessions = []
-    database = sql.sql()
+    db = database.Database()
 
     # Discord setup
     TOKEN = config.TOKEN
-    bot = commands.Bot(command_prefix='>', intents=discord.Intents.all())
+    bot = commands.Bot(command_prefix="!", intents=discord.Intents.all())
 
-    def get_active_session(channel_id):
-        if active_sessions:
-            for session in active_sessions:
-                if session.channel_id == channel_id:
-                    return session
-        return None
-
-
-    @has_required_role()
-    @bot.hybrid_command(name="manual_match", description="Manually assign match results.")
-    async def manual_match(ctx, users_str: str, r1_winner, r2_winner=None, r3_winner=None):
-        users = [User(await convert(ctx, user)) for user in users_str.split()]
-        user_names = [user.get_name() for user in users]
-        match = {'p1': user_names[0], 'p2': user_names[1],
-                 'r1_winner': User(await convert(ctx, r1_winner)).get_name(),
-                 'r2_winner': User(await convert(ctx, r2_winner)).get_name() if r2_winner is not None else None,
-                 'r3_winner': User(await convert(ctx, r3_winner)).get_name() if r3_winner is not None else None}
-        wins = {match['p1']: 0, match['p2']: 0}
-
-        for winner in [r1_winner, r2_winner, r3_winner]:
-            winner = User(await convert(ctx, winner))
-            if winner.get_name() is not None:
-                if winner.get_name() not in [match['p1'], match['p2']]:
-                    await ctx.send("You must provide valid winners!")
-                    return
-                else:
-                    wins[winner.get_name()] += 1
-
-        if wins[match['p1']] == wins[match['p2']]:
-            await ctx.send("You must provide a valid winner!")
-            return
-
-        for user in users:
-            database.set_user(user.get_name())
-
-        prior_scores = {user_names[0]: database.get_elo(user_names[0]), user_names[1]: database.get_elo(user_names[1])}
-        prior_ranks = {user_names[0]: database.get_rank(user_names[0]), user_names[1]: database.get_rank(user_names[1])}
-
-        database.adjust_score(p1=match['p1'],
-                              p2=match['p2'],
-                              match=match)
-
-        embed = discord.Embed(title=f"Match results for {users[0].get_nick()} and {users[1].get_nick()} "
-                                    f"have been updated.",
-                              description="",
-                              color=0x24bc9c)
-
-        for user in users:
-            embed.add_field(name=f"> {user.get_nick()}",
-                            value=f"\n> `Elo {prior_scores[user.get_name()]} -> {database.get_elo(user.get_name())}`"
-                                  f"\n> `Rank {prior_ranks[user.get_name()]} -> {database.get_rank(user.get_name())}`",
-                            inline=False)
-
-        # Send a message confirming change
-        await ctx.send(embed=embed)
+    async def convert(ctx, player_str):
+        try:
+            return await commands.MemberConverter().convert(ctx, player_str), True
+        except commands.MemberNotFound:
+            return player_str, False
+        except TypeError:
+            return None
 
 
     @has_required_role()
     @bot.hybrid_command(name="new_game", description="Create a new game session.")
-    async def new_game(ctx, users_str: str, three_rounds: str = 't'):
-        users = [User(await convert(ctx, user)) for user in users_str.split()]
+    async def new_game(ctx, players_str: str):
+        player_tags = players_str.split()
+        db_players = db.get_all_players()
+        players = []
 
-        # List of users must be greater than 4
-        if len(users) < 4:
+        # List of players must be at least 4
+        if len(player_tags) < 4:
             await ctx.send("You must provide at least 4 players!")
             return
-        # Check for any active sessions
-        if get_active_session(ctx.channel):
-            await ctx.send("A session is already active. Please cancel that session before starting a new one.")
-            return
 
-        # Determine if the user would like to set the match to three rounds regardless of player amount
-        if three_rounds.lower() in ['t', 'true', 'y', 'yes'] or len(users) >= 6:
-            three_rounds = True
-        else:
-            three_rounds = False
+        # Populate players list with participating players
+        # Set the player in the database if they are new and have valid Discord info
+        # Create a temporary player otherwise
+        for player_tag in player_tags:
+            player_id, player_nick, original_elo, original_rank = None, player_tag, 1200, None
+            temporary = False if player_tag[:2] == "<@" else True
 
-        new_session = Session(users, three_rounds, ctx.channel)
-        active_sessions.append(new_session)
+            for db_row in db_players:
+                # If the player's Discord tag is found in the database
+                if player_tag == db_row[1]:
+                    player_id, player_nick, original_elo, original_rank = \
+                        db_row[0], db_row[2], db_row[4], db.get_rank(player_id)
 
-        await view.RosterView(new_session, ctx.channel).send(ctx)
+            # If the player was not found in the database
+            if player_id is None and not temporary:
+                # Get the Discord info for the player if their tag is valid
+                new_player, player_found = await convert(ctx, player_tag)
 
+                if player_found:
+                    player_id, player_nick = new_player.id, ctx.guild.get_member(new_player.id).nick
+                    if player_nick is None:
+                        player_nick = ctx.guild.get_member(new_player.id).name
+                    # Set player info in database
+                    db.set_player(player_id, player_tag, player_nick)
+                else:
+                    print("Issue retrieving player's info from Discord (Main.py new_game())")
 
-    @has_required_role()
-    @bot.hybrid_command(name="close_session", description="Close a game session.")
-    async def close_session(ctx):
-        session = get_active_session(ctx.channel)
-        if session:
-            active_sessions.remove(session)
-            await ctx.send("Session closed.")
-            return
-        ctx.send("No active session found in this channel.")
+            # Add the player to the list of players participating in the current session
+            players.append(Player(player_id, player_tag, player_nick, original_elo, original_rank))
 
-
-    @has_required_role()
-    @bot.hybrid_command(name="create_seating", description="Create a seating chart for a game session.")
-    async def create_seating(ctx):
-        await view.SeatingView(get_active_session(ctx.channel), ctx.channel).send(ctx)
-
-
-    @has_required_role()
-    @bot.hybrid_command(name="next_match", description="Generate the next match for the current session.")
-    async def next_match(ctx):
-        await view.PairingView(get_active_session(ctx.channel), ctx.channel).send(ctx)
-
-
-    @has_required_role()
-    @bot.hybrid_command(name="match_winners", description="Input the winners for the current match.")
-    async def match_winners(ctx):
-        session = get_active_session(ctx.channel)
-        if session and session.active:
-            match_view = view.MatchView(session, ctx.channel)
-            await match_view.send(ctx)
-        else:
-            await ctx.send("No active match found.")
-
-    # Drop a user from the current session
-    @has_required_role()
-    @bot.hybrid_command(name="drop_users", description="Drop a user from the current session.")
-    async def drop_users(ctx, users_str: str):
-        session = get_active_session(ctx.channel)
-        if session is not None:
-            users = [User(await convert(ctx, user)) for user in users_str.split()]
-            for user in users:
-                if user.get_name() not in [user.get_name() for user in session.get_active_users()]:
-                    await ctx.send("You must only provide users who are actively in the session!")
-                    return
-            session.drop_users(users)
-            session_view = view.RosterView(session, ctx.channel)
-            await session_view.send(ctx)
-
-
-    @bot.hybrid_command(name="elo", description="Retrieve your current elo score.")
-    async def elo(ctx):
-        database.set_user(ctx.author)
-        embed = discord.Embed(title=f"{ctx.author.nick}",
-                              description=f"Your elo score is {database.get_elo(ctx.author)}.\n"
-                                          f"Your rank is {database.get_rank(ctx.author)}.",
-                              color=0x24bc9c)
-        await ctx.send(embed=embed)
-
-
-    @bot.hybrid_command(name="leaderboard", description="Get the current leaderboard for your server.")
-    async def leaderboard(ctx):
-        server_leaderboard = database.get_leaderboard()
-        embed = discord.Embed(title=f"Leaderboard",
-                              description="",
-                              color=0x24bc9c)
-        for placement, value in server_leaderboard.items():
-            if placement <= 10:
-                user = User(await convert(ctx, value['user']))
-                embed.add_field(name=f"`{' ' * 10}Rank {placement}{' ' * (10 - len(str(placement)))}`",
-                                value=f"> {user.get_nick()}\n> {value['elo']}",
-                                inline=False)
-        await ctx.send(embed=embed)
+        session = Session(players, db)
+        view = SessionView(ctx, session, ctx.message.id)
+        bot.add_view(view)
+        await ctx.send(view=view, embed=view.roster_embed())
 
     # Login confirmation
     @bot.event

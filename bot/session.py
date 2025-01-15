@@ -1,226 +1,191 @@
-from bot.user import User
-import bot.sql as sql
 import random
+
+from bot.log import Log
+from bot.util import get_longest_name_length
+from bot.match import Match
 from datetime import datetime
 
 
-def assign_id(session_list):
-    existing_ids = [session.get_id() for session in session_list]
-    if len(session_list) > 0:
-        if min(existing_ids) == 10:
-            return None
-
-        for i in range(1, 10):
-            if i not in existing_ids:
-                return i
-    return 1
-
-
-def get_session(session_list, session_id):
-    for session in session_list:
-        if session.get_id() == session_id:
-            return session
-    return None
-
-
-def get_session_users(session):
-    output = ""
-    for user in session.get_users():
-        if len(output) > 0:
-            output = f"{output}, {user.user_info.name}"
-        else:
-            output = f"{user.user_info.name}"
-    return output
-
-
 class Session:
-    def __init__(self, users, three_rounds, channel_id):
-        self.channel_id = channel_id
-        self.users = users
+    def __init__(self, players, database):
+        self.players = players
+        self.db = database
         self.removed_players = []
-        self.database = sql.sql()
         self.game_winners = None
-        self.matches = {}
+        self.match_set = {1: Match(), 2: Match(), 3: Match()}
+        self.active_match_num = 0
         self.active = []
-        self.bye = None
-        self.longest = self.get_longest_user_name()
-        self.three_rounds = three_rounds
+        self.log = Log(players)
+        self.longest = get_longest_name_length(self.players)
         self.datetime = datetime.now().strftime("%d/%m/%Y %H:%M")
-        for user in self.users:
-            self.database.set_user(user.get_name())
-            user.original_elo = self.database.get_elo(user.get_name())
-            user.original_rank = self.database.get_rank(user.get_name())
 
-    def update_winners(self):
-        for match in self.matches[len(self.matches)].values():
-            match['p2'].record[match['p1']], match['p1'].record[match['p2']] = self.get_match_results(match)
-            p1_score = match['p2'].record[match['p1']]
-            p2_score = match['p1'].record[match['p2']]
+    # Get list of players who have not dropped from the game
+    def get_active_players(self):
+        return [player for player in self.players if player not in self.removed_players]
 
-            if p1_score > p2_score:
-                match['p1'].record['wins'] += 1
-                match['p2'].record['losses'] += 1
-            elif p1_score < p2_score:
-                match['p2'].record['wins'] += 1
-                match['p1'].record['losses'] += 1
-
-            self.database.adjust_score(p1=match['p1'].get_name(),
-                                       p2=match['p2'].get_name(),
-                                       match=match)
-
-    def get_active_users(self):
-        removed_player_names = [user.get_name() for user in self.removed_players]
-        return [user for user in self.users if user.get_name() not in removed_player_names]
-
-    def get_longest_user_name(self):
-        longest_name = 0
-        for user in self.users:
-            if len(user.get_nick()) > longest_name:
-                longest_name = len(user.get_nick())
-        return longest_name
-
+    # Get prior opponents of specified player for matchmaking purposes
     def get_prior_opponents(self, player):
         prior_opponents = []
-        for key, match in self.matches.items():
-            if key < len(self.matches):
-                for pair in match.values():
-                    if pair['p1'] == player:
-                        prior_opponents.append(pair['p2'])
-                        break
-                    elif pair['p2'] == player:
-                        prior_opponents.append(pair['p1'])
-                        break
+        for match in self.match_set.values():
+            prior_opponents.append(match.get_opponent(player))
         return prior_opponents
 
-    def get_match_results(self, match):
-        p1_wins = 0
-        p2_wins = 0
-        for round_winner in [match['r1_winner'], match['r2_winner'], match['r3_winner']]:
-            try:
-                if round_winner == match['p1']:
-                    p1_wins += 1
-                elif round_winner == match['p2']:
-                    p2_wins += 1
-            except TypeError:
-                pass
-        return p1_wins, p2_wins
+    # Get the current match
+    def get_current_match(self):
+        return self.match_set[self.active_match_num]
 
-    def set_game_winners(self, premature=False):
-        winners = [user for user in self.get_active_users() if user.record['losses'] == 0]
-        if premature or (len(winners) == 1 and self.three_rounds is False) or \
-                (self.three_rounds is True and len(self.matches) == 3):
-            self.game_winners = winners
-            for user in self.users:
-                self.database.increment_games_played(user.get_name())
+    # Match a given player to a valid unmatched player
+    def match_player(self, given_player, player_list):
+        prior_opponents = self.get_prior_opponents(given_player)
+        # If this is the first match
+        if len(self.match_set) == 0:
+            # Avoid matching given player to anyone in the seats directly beside them
+            matched_player = random.choice([player for player in player_list if abs(player.seat - given_player.seat) != 1])
         else:
-            self.game_winners = None
+            # Match player if they have not faced them in a prior match
+            matched_player = random.choice([player for player in player_list if player not in prior_opponents])
 
-    def match_players(self, current_player, player_list):
-        prior_opponents = self.get_prior_opponents(current_player)
-        try:
-            if len(self.matches) == 1:
-                matched_player = random.choice(
-                    [user for user in player_list if abs(user.seat - current_player.seat) != 1]
-                )
-            else:
-                matched_player = random.choice(
-                    [user for user in player_list if user not in prior_opponents]
-                )
-            player_list.remove(matched_player)
-            return matched_player, True
-        except IndexError:
-            return None, False
+        return matched_player
 
-    def create_match_pair(self, match_num, p1, p2):
-        if p1 is not None and p2 is not None:
-            self.matches[match_num][len(self.matches[match_num]) + 1] = {}
-            pair_info = self.matches[match_num][len(self.matches[match_num])]
-            pair_info['p1'] = p1
-            pair_info['p2'] = p2
-            pair_info["r1_winner"], pair_info["r2_winner"], pair_info["r3_winner"] = None, None, None
+    # Get all currently undefeated players
+    def get_undefeated_players(self):
+        return [player for player in self.get_active_players() if self.get_player_record(player)['losses'] == 0]
 
-    def drop_users(self, users):
-        for user_to_remove in users:
-            for active_user in self.get_active_users():
-                if active_user.get_name() == user_to_remove.get_name():
-                    self.removed_players.append(active_user)
-            if self.bye is not None:
-                if self.bye.get_name() == user_to_remove.get_name():
-                    self.bye = None
+    # Get the record of a player in the current session
+    def get_player_record(self, player):
+        return {
+            'wins': sum(player in match.get_match_results()['winners'] for match in self.match_set.values()),
+            'losses': sum(player in match.get_match_results()['losers'] for match in self.match_set.values())
+        }
 
+    # Increment the match number by 1
+    def increment_match_num(self):
+        self.active_match_num += 1
+
+    # Drop a player from the game based on a given list of player tags
+    def drop_players(self, player_tags):
+        active_match = self.match_set[self.active_match_num]
+        # For player tag in list of players to drop
+        for player_tag in player_tags:
+            # For player in list of currently active players
+            for active_player in self.get_active_players():
+                # If the tags are the same, drop the player by adding them to the list of removed players
+                if active_player.tag == player_tag:
+                    self.removed_players.append(active_player)
+            # If that player was on the bye, set the bye to none
+            if active_match.bye is not None and active_match.bye.get_tag() == player_tag:
+                active_match.bye = None
+
+    # Commit all player ELO scores to the database
+    def commit_elo_scores(self):
+        for player in self.players:
+            self.db.set_elo(player.id, player.new_elo)
+
+    # Commit a final log to the database
+    def commit_log(self):
+        # Update the player ranks
+        for player in self.players:
+            player.new_rank = self.db.get_rank(player.id)
+        self.db.set_log(self.log.get_log())
+
+    # Create a new match and assign players to pairings
     def new_match(self):
-        valid = False
-        match_num = len(self.matches) + 1
-
-        while not valid:
-            valid = True
-            self.matches[match_num] = {}
-            unassigned_winners = [user for user in self.get_active_users() if user.record['losses'] == 0]
-            unassigned_losers = {1: [], 2: []}
-            for i in range(1, match_num):
-                unassigned_losers[i] = [user for user in self.get_active_users() if user.record['losses'] == i]
-
-            while unassigned_winners:
-                matched_player = None
-
-                if self.bye is not None and self.bye in unassigned_winners:
-                    current_player = self.bye
-                    unassigned_winners.remove(self.bye)
-                    self.bye = None
+        # Increment the match counter
+        self.increment_match_num()
+        # Get the active match
+        active_match = self.match_set[self.active_match_num]
+        # While the matchmaking for the round is invalid or incomplete
+        while True:
+            try:
+                # Initialize the unassigned players with keys 0, 1, and 2, each having an empty list as a value
+                unassigned_players = {0: [], 1: [], 2: []}
+                # Populate the lists with players based on their number of losses
+                for player in self.get_active_players():
+                    losses = self.get_player_record(player)['losses']
+                    unassigned_players[losses].append(player)
+                # While there are unassigned winners
+                while unassigned_players[0]:
+                    matched_player = None
+                    # If there is a bye and they have no losses
+                    if active_match.bye is not None and active_match.bye in unassigned_players[0]:
+                        # Player on the bye gets priority in being matched
+                        given_player = active_match.bye
+                        active_match.bye = None
+                    else:
+                        # Get a random player from the unassigned list
+                        given_player = random.choice(unassigned_players[0])
+                    # Remove the given player from the unassigned list
+                    unassigned_players[0].remove(given_player)
+                    # If there are other players without losses
+                    if len(unassigned_players[0]) > 0:
+                        matched_player = self.match_player(given_player, unassigned_players[0])
+                        unassigned_players[0].remove(matched_player)
+                    # If there are no other players without losses but there are players with a single loss
+                    elif len(unassigned_players[0]) == 0 and unassigned_players[1]:
+                        matched_player = self.match_player(given_player, unassigned_players[1])
+                        unassigned_players[1].remove(matched_player)
+                    # If there is one player leftover in the unassigned winners and there aren't any players with
+                    # losses, put the leftover player on the bye
+                    if len(unassigned_players[0]) == 1 and not unassigned_players[1]:
+                        active_match.bye = unassigned_players[0].pop
+                    # Create a new pairing in the match
+                    active_match.new_pairing(given_player, matched_player)
+                # While there are unassigned players with 1 or 2 losses
+                while unassigned_players[1] or unassigned_players[2]:
+                    given_player = None
+                    matched_player = None
+                    # If there's a bye, prioritize their assignment
+                    if active_match.bye is not None:
+                        given_player = active_match.bye
+                        if given_player in unassigned_players[1]:
+                            unassigned_players[1].remove(given_player)
+                        else:
+                            unassigned_players[2].remove(given_player)
+                        active_match.bye = None
+                        # Match the player on the bye with a random remaining player
+                        if len(unassigned_players[1]) >= 1:
+                            matched_player = self.match_player(given_player, unassigned_players[1])
+                            unassigned_players[1].remove(matched_player)
+                        elif len(unassigned_players[2]) >= 1:
+                            matched_player = self.match_player(given_player, unassigned_players[2])
+                            unassigned_players[2].remove(matched_player)
+                    # If there is one unassigned player with no losses:
+                    elif len(unassigned_players[0]) == 1 and unassigned_players[1]:
+                        given_player = unassigned_players[0].pop()
+                        matched_player = self.match_player(given_player, unassigned_players[1])
+                        unassigned_players[1].remove(matched_player)
+                    # If there are more than one unassigned players with one loss
+                    elif len(unassigned_players[1]) > 1:
+                        given_player = random.choice(unassigned_players[1])
+                        unassigned_players[1].remove(given_player)
+                        matched_player = self.match_player(given_player, unassigned_players[1])
+                        unassigned_players[1].remove(matched_player)
+                    # If there is only one player with a single loss but players with two losses available
+                    elif len(unassigned_players[1]) == 1 and unassigned_players[2]:
+                        given_player = random.choice(unassigned_players[1])
+                        unassigned_players[1].remove(given_player)
+                        matched_player = self.match_player(given_player, unassigned_players[2])
+                        unassigned_players[2].remove(matched_player)
+                    # If there are two or more players with two losses
+                    elif len(unassigned_players[2]) > 1:
+                        given_player = random.choice(unassigned_players[2])
+                        unassigned_players[2].remove(given_player)
+                        matched_player = self.match_player(given_player, unassigned_players[2])
+                        unassigned_players[2].remove(matched_player)
+                    # Assign the bye if there is a player leftover
+                    if len(unassigned_players[1]) == 1 and not unassigned_players[2]:
+                        active_match.bye = unassigned_players[1].pop()
+                    elif (len(unassigned_players[2])) == 1 and not unassigned_players[1]:
+                        active_match.bye = unassigned_players[2].pop()
+                    # Create a new pairing in the match
+                    active_match.new_pairing(given_player, matched_player)
+                # If there are no unassigned players, assign the buffer and break the loop
+                if not unassigned_players[0] and not unassigned_players[1] and not unassigned_players[2]:
+                    active_match.bye_buffer = active_match.bye
+                    break
                 else:
-                    current_player = random.choice(unassigned_winners)
-                    unassigned_winners.remove(current_player)
-
-                if len(unassigned_winners) > 0:
-                    matched_player, valid = self.match_players(current_player, unassigned_winners)
-                elif len(unassigned_winners) == 0 and unassigned_losers[1]:
-                    matched_player, valid = self.match_players(current_player, unassigned_losers[1])
-
-                if len(unassigned_winners) == 1 and not unassigned_losers[1]:
-                    self.bye = unassigned_winners.pop()
-
-                if matched_player is None:
-                    matched_player = random.choice(unassigned_losers)
-
-                self.create_match_pair(match_num, current_player, matched_player)
-
-            while unassigned_losers[1] or unassigned_losers[2]:
-                current_player = None
-                matched_player = None
-
-                if self.bye is not None:
-                    current_player = self.bye
-                    unassigned_losers[1].remove(current_player)
-                    self.bye = None
-                    if len(unassigned_losers[1]) > 1:
-                        matched_player, valid = self.match_players(current_player, unassigned_losers[1])
-                    elif len(unassigned_losers[2]) > 1:
-                        matched_player, valid = self.match_players(current_player, unassigned_losers[2])
-                elif len(unassigned_losers[1]) > 1:
-                    current_player = random.choice(unassigned_losers[1])
-                    unassigned_losers[1].remove(current_player)
-                    matched_player, valid = self.match_players(current_player, unassigned_losers[1])
-                elif len(unassigned_losers[1]) == 1 and unassigned_losers[2]:
-                    current_player = random.choice(unassigned_losers[1])
-                    unassigned_losers[1].remove(current_player)
-                    matched_player, valid = self.match_players(current_player, unassigned_losers[2])
-                elif len(unassigned_losers[2]) > 1:
-                    current_player = random.choice(unassigned_losers[2])
-                    unassigned_losers[2].remove(current_player)
-                    matched_player, valid = self.match_players(current_player, unassigned_losers[2])
-
-                if len(unassigned_losers[1]) == 1 and not unassigned_losers[2]:
-                    self.bye = unassigned_losers[1].pop()
-                elif len(unassigned_losers[2]) == 1 and not unassigned_losers[1]:
-                    self.bye = unassigned_losers[2].pop()
-
-                self.create_match_pair(match_num, current_player, matched_player)
-
-        return self.matches[match_num]
-
-    async def delete_active_matches(self, ctx):
-        if len(self.active) > 0:
-            for pair in self.active:
-                message = await ctx.fetch_message(pair.message.id)
-                await message.delete()
-            self.active = []
+                    active_match.bye = active_match.bye_buffer
+            except IndexError:
+                active_match.bye = active_match.bye_buffer
+        # Return the active match
+        return active_match

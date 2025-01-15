@@ -3,15 +3,15 @@ from discord.ext import commands
 
 
 def has_required_role():
-    allowed_roles = ['Officer', '"Technician"']
+    allowed_roles = ['Officer', 'Bot Wrangler']
 
     async def predicate(interaction):
         if type(interaction) == discord.Interaction:
-            user_roles = [role.name for role in interaction.user.roles]
+            player_roles = [role.name for role in interaction.player.roles]
         else:
-            user_roles = [role.name for role in interaction.author.roles]
+            player_roles = [role.name for role in interaction.author.roles]
 
-        if any(role in user_roles for role in allowed_roles):
+        if any(role in player_roles for role in allowed_roles):
             return True
         else:
             return False
