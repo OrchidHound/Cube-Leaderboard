@@ -73,7 +73,7 @@ class Session:
                 if active_player.tag == player_tag:
                     self.removed_players.append(active_player)
             # If that player was on the bye, set the bye to none
-            if active_match.bye is not None and active_match.bye.get_tag() == player_tag:
+            if active_match.bye is not None and active_match.bye.tag == player_tag:
                 active_match.bye = None
 
     # Commit all player ELO scores to the database

@@ -72,7 +72,7 @@ if __name__ == '__main__':
 
 
     @has_required_role()
-    @bot.hybrid_command(name="new_game", description="Create a new game session.")
+    @bot.hybrid_command(name="manual_game", description="Input a game session manually.")
     async def manual_game(ctx, players_str: str):
         player_tags = players_str.split()
         db_players = db.get_all_players()

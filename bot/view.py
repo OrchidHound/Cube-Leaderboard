@@ -138,6 +138,9 @@ class SessionView(discord.ui.View):
             self.embed.description = "Looks like nobody wins this session. Better luck next time!"
 
         for player in self.session.players:
+            if player.id is not None:
+                self.session.db.increment_games_played(player.id)
+            # Create a field for each player with their new ELO and rank
             spacing = 25 - len(player.get_trimmed_nick())
             if spacing % 2 == 0:
                 left_spacing = ' ' * int(spacing / 2)

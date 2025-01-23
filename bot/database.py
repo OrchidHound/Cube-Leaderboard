@@ -60,7 +60,7 @@ class Database:
             leaderboard = {}
             self.c.execute(
                 """
-                SELECT player_nick, elo_score 
+                SELECT player_id, elo_score 
                 FROM players
                 WHERE games_played >= 3
                 ORDER BY elo_score DESC
@@ -68,7 +68,7 @@ class Database:
             )
             data = self.c.fetchall()
             for rank, row in enumerate(data):
-                leaderboard[rank + 1] = {'player': row[1], 'elo': row[2]}
+                leaderboard[rank + 1] = {'player_id': row[0], 'elo': row[1]}
             return leaderboard
         except Error as e:
             print('Get leaderboard error: ' + str(e))
@@ -76,7 +76,7 @@ class Database:
     def get_rank(self, player_id):
         leaderboard = self.get_leaderboard()
         for rank, row in leaderboard.items():
-            if row['player']['player_id'] == player_id:
+            if row['player_id'] == player_id:
                 return rank
 
     def get_elo(self, player_id):
