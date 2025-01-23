@@ -127,7 +127,8 @@ class Session:
                     # If there is one player leftover in the unassigned winners and there aren't any players with
                     # losses, put the leftover player on the bye
                     if len(unassigned_players[0]) == 1 and not unassigned_players[1]:
-                        active_match.bye = unassigned_players[0].pop
+                        active_match.bye = unassigned_players[0][0]
+                        unassigned_players[0].remove(active_match.bye)
                     # Create a new pairing in the match
                     active_match.new_pairing(given_player, matched_player)
                 # While there are unassigned players with 1 or 2 losses

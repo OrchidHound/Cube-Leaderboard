@@ -70,6 +70,14 @@ if __name__ == '__main__':
         bot.add_view(view)
         await ctx.send(view=view, embed=view.roster_embed())
 
+
+    @has_required_role()
+    @bot.hybrid_command(name="new_game", description="Create a new game session.")
+    async def manual_game(ctx, players_str: str):
+        player_tags = players_str.split()
+        db_players = db.get_all_players()
+        players = []
+
     # Login confirmation
     @bot.event
     async def on_ready():
