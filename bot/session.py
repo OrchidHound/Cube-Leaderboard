@@ -1,3 +1,4 @@
+import json
 import random
 
 from bot.log import Log
@@ -35,7 +36,10 @@ class Session:
         return self.match_set[self.active_match_num]
 
     # Match a given player to a valid unmatched player
-    def match_player(self, given_player, player_list):
+    # player_list is either players with 0 or 1 losses, depending on match state
+    # player_list_2 is the list of players with 2 losses and is only relevant when two players with 1 loss in
+    # round 3 have already played against each other
+    def match_player(self, given_player, player_list, player_list_2=None):
         prior_opponents = self.get_prior_opponents(given_player)
         # If this is the first match
         if len(self.match_set) == 0:
@@ -43,7 +47,10 @@ class Session:
             matched_player = random.choice([player for player in player_list if abs(player.seat - given_player.seat) != 1])
         else:
             # Match player if they have not faced them in a prior match
-            matched_player = random.choice([player for player in player_list if player not in prior_opponents])
+            if len([player for player in player_list if player not in prior_opponents]) == 0:
+                matched_player = random.choice([player for player in player_list_2 if player not in prior_opponents])
+            else:
+                matched_player = random.choice([player for player in player_list if player not in prior_opponents])
 
         return matched_player
 
@@ -145,7 +152,7 @@ class Session:
                         active_match.bye = None
                         # Match the player on the bye with a random remaining player
                         if len(unassigned_players[1]) >= 1:
-                            matched_player = self.match_player(given_player, unassigned_players[1])
+                            matched_player = self.match_player(given_player, unassigned_players[1], unassigned_players[2])
                             unassigned_players[1].remove(matched_player)
                         elif len(unassigned_players[2]) >= 1:
                             matched_player = self.match_player(given_player, unassigned_players[2])
@@ -153,25 +160,25 @@ class Session:
                     # If there is one unassigned player with no losses:
                     elif len(unassigned_players[0]) == 1 and unassigned_players[1]:
                         given_player = unassigned_players[0].pop()
-                        matched_player = self.match_player(given_player, unassigned_players[1])
+                        matched_player = self.match_player(given_player, unassigned_players[1], unassigned_players[2])
                         unassigned_players[1].remove(matched_player)
                     # If there are more than one unassigned players with one loss
                     elif len(unassigned_players[1]) > 1:
                         given_player = random.choice(unassigned_players[1])
                         unassigned_players[1].remove(given_player)
-                        matched_player = self.match_player(given_player, unassigned_players[1])
+                        matched_player = self.match_player(given_player, unassigned_players[1], unassigned_players[2])
                         unassigned_players[1].remove(matched_player)
                     # If there is only one player with a single loss but players with two losses available
                     elif len(unassigned_players[1]) == 1 and unassigned_players[2]:
                         given_player = random.choice(unassigned_players[1])
                         unassigned_players[1].remove(given_player)
-                        matched_player = self.match_player(given_player, unassigned_players[2])
+                        matched_player = self.match_player(given_player, unassigned_players[2], unassigned_players[2])
                         unassigned_players[2].remove(matched_player)
                     # If there are two or more players with two losses
                     elif len(unassigned_players[2]) > 1:
                         given_player = random.choice(unassigned_players[2])
                         unassigned_players[2].remove(given_player)
-                        matched_player = self.match_player(given_player, unassigned_players[2])
+                        matched_player = self.match_player(given_player, unassigned_players[2], unassigned_players[2])
                         unassigned_players[2].remove(matched_player)
                     # Assign the bye if there is a player leftover
                     if len(unassigned_players[1]) == 1 and not unassigned_players[2]:
@@ -190,3 +197,31 @@ class Session:
                 active_match.bye = active_match.bye_buffer
         # Return the active match
         return active_match
+
+    def manual_match(self, data):
+        def get_player_by_id(player_id):
+            for player in self.players:
+                if str(player.id) == player_id:
+                    return player
+
+        self.active_match_num = 1
+
+        for match_num, match in data['matches'].items():
+            self.match_set[self.active_match_num] = Match()
+            active_match = self.match_set[self.active_match_num]
+            for pairing_key, pairing in match['pairings'].items():
+                p1 = get_player_by_id(pairing['p1'])
+                p2 = get_player_by_id(pairing['p2'])
+                active_match.new_pairing(p1, p2)
+                active_match.pairings[-1].wins = {p1: pairing['p1_wins'], p2: pairing['p2_wins']}
+                active_match.pairings[-1].adjust_elo()
+            self.log.add_match(active_match, self.active_match_num)
+            self.commit_elo_scores()
+            self.increment_match_num()
+
+        for player in self.players:
+            if player.id is not None:
+                self.db.increment_games_played(player.id)
+
+        self.commit_log()
+        return True

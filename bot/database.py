@@ -60,7 +60,7 @@ class Database:
             leaderboard = {}
             self.c.execute(
                 """
-                SELECT player_id, elo_score 
+                SELECT player_id, elo_score, player_nick
                 FROM players
                 WHERE games_played >= 3
                 ORDER BY elo_score DESC
@@ -68,7 +68,7 @@ class Database:
             )
             data = self.c.fetchall()
             for rank, row in enumerate(data):
-                leaderboard[rank + 1] = {'player_id': row[0], 'elo': row[1]}
+                leaderboard[rank + 1] = {'player_id': row[0], 'elo': row[1], 'player_nick': row[2]}
             return leaderboard
         except Error as e:
             print('Get leaderboard error: ' + str(e))

@@ -11,7 +11,7 @@ class Log:
             'pairings': {}
         }
         for pair_num in range(len(match.pairings)):
-            self.match_logs[match_num]['pairings'][pair_num] = {
+            self.match_logs[match_num]['pairings'][str(pair_num)] = {
                 'p1': match.pairings[pair_num].p1.id,
                 'p2': match.pairings[pair_num].p2.id,
                 'p1_wins': match.pairings[pair_num].wins[match.pairings[pair_num].p1],

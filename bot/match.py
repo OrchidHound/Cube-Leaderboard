@@ -52,10 +52,10 @@ class Pairing:
                 self.p1.new_elo = calc_new_score(
                     self.p1.new_elo,
                     p1_expected_score,
-                    self.wins[self.p1])
+                    1 if self.get_match_winner() == self.p1 else 0)
                 self.p2.new_elo = calc_new_score(
                     self.p2.new_elo,
                     p2_expected_score,
-                    self.wins[self.p2])
+                    1 if self.get_match_winner() == self.p2 else 0)
             except TypeError as e:
                 print("Type error when updating elo score: " + str(e))

@@ -1,3 +1,6 @@
+import io
+import json
+
 import discord
 import config
 import bot.database as database
@@ -23,17 +26,9 @@ if __name__ == '__main__':
             return None
 
 
-    @has_required_role()
-    @bot.hybrid_command(name="new_game", description="Create a new game session.")
-    async def new_game(ctx, players_str: str):
-        player_tags = players_str.split()
+    async def get_players(ctx, player_tags):
         db_players = db.get_all_players()
         players = []
-
-        # List of players must be at least 4
-        if len(player_tags) < 4:
-            await ctx.send("You must provide at least 4 players!")
-            return
 
         # Populate players list with participating players
         # Set the player in the database if they are new and have valid Discord info
@@ -65,6 +60,21 @@ if __name__ == '__main__':
             # Add the player to the list of players participating in the current session
             players.append(Player(player_id, player_tag, player_nick, original_elo, original_rank))
 
+        return players
+
+
+    @has_required_role()
+    @bot.hybrid_command(name="new_game", description="Create a new game session.")
+    async def new_game(ctx, players_str: str):
+        player_tags = players_str.split()
+
+        # List of players must be at least 4
+        if len(player_tags) < 4:
+            await ctx.send("You must provide at least 4 players!")
+            return
+
+        players = await get_players(ctx, player_tags)
+
         session = Session(players, db)
         view = SessionView(ctx, session, ctx.message.id)
         bot.add_view(view)
@@ -73,10 +83,34 @@ if __name__ == '__main__':
 
     @has_required_role()
     @bot.hybrid_command(name="manual_game", description="Input a game session manually.")
-    async def manual_game(ctx, players_str: str):
+    async def manual_game(ctx, players_str: str, file: discord.Attachment):
         player_tags = players_str.split()
-        db_players = db.get_all_players()
-        players = []
+        players = await get_players(ctx, player_tags)
+        if file.content_type != "application/json; charset=utf-8":
+            await ctx.send("Please attach a JSON file with the game results. See Github for the format.")
+            return
+        json_file = await file.to_file()
+        session = Session(players, db)
+        if session.manual_match(json.load(json_file.fp)):
+            await ctx.send("Match results have been recorded.")
+        else:
+            await ctx.send("Error recording match results.")
+
+
+    @bot.hybrid_command(name="leaderboard", description="Get the current leaderboard for your server.")
+    async def leaderboard(ctx):
+        server_leaderboard = db.get_leaderboard()
+        embed = discord.Embed(
+            title=f"Leaderboard",
+            description="",
+            color=0x24bc9c)
+        for placement, value in server_leaderboard.items():
+            if placement <= 10:
+                embed.add_field(
+                    name=f"`{' ' * 10}Rank {placement}{' ' * (10 - len(str(placement)))}`",
+                    value=f"> {value['player_nick']}\n> {value['elo']}",
+                    inline=False)
+        await ctx.send(embed=embed)
 
     # Login confirmation
     @bot.event

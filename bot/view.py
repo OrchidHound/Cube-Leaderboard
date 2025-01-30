@@ -3,16 +3,13 @@ import random
 import discord
 
 
-class SessionView(discord.ui.View):
+class PersistentView(discord.ui.View):
     def __init__(self, ctx, session, session_id):
         super().__init__(timeout=None)
-        self.ctx = ctx
         self.session = session
         self.session_id = session_id
-        self.add_buttons([self.create_button("Generate Seating", "green", "seating", self.seating_callback)])
-        self.players_to_drop = []
+        self.ctx = ctx
         self.embed = discord.Embed(color=0x24bc9c)
-        self.embed.set_footer(text=self.session.datetime)
         self.embed.set_image(url="https://cdn.discordapp.com/attachments/1186834070085316691/1226447322368577608/"
                                  "footer.png?ex=6624cd13&is=66125813&hm="
                                  "93d7af4b304e9a3c4026264aa311e4684e27df5d1057f07f4a57234eb9ca98b5&")
@@ -38,6 +35,28 @@ class SessionView(discord.ui.View):
             custom_callback=custom_callback,
             disabled=disabled)
         return button
+
+    # Embed for session cancellation
+    async def cancel_embed(self):
+        self.embed.title = "Session Cancelled"
+        self.embed.description = "The session has been cancelled."
+        return self.embed
+
+    # Callback for cancel button
+    async def cancel_callback(self, interaction, button: discord.ui.Button):
+        self.clear_items()
+        self.embed.clear_fields()
+        self.embed = await self.cancel_embed()
+        self.session.commit_log()
+        await interaction.response.edit_message(view=self, embed=self.embed)
+
+
+class SessionView(PersistentView):
+    def __init__(self, ctx, session, session_id):
+        super().__init__(ctx, session, session_id)
+        self.add_buttons([self.create_button("Generate Seating", "green", "seating", self.seating_callback)])
+        self.players_to_drop = []
+        self.embed.set_footer(text=self.session.datetime)
 
     # Embed for roster
     def roster_embed(self):
@@ -159,12 +178,6 @@ class SessionView(discord.ui.View):
 
         return self.embed
 
-    # Embed for session cancellation
-    async def cancel_embed(self):
-        self.embed.title = "Session Cancelled"
-        self.embed.description = "The session has been cancelled."
-        return self.embed
-
     # Callback for seating button
     async def seating_callback(self, interaction, button: discord.ui.Button):
         self.embed.clear_fields()
@@ -259,14 +272,6 @@ class SessionView(discord.ui.View):
     async def selector_callback(self, interaction, select: discord.ui.Select):
         await interaction.response.defer()
         self.players_to_drop = select.values
-
-    # Callback for cancel button
-    async def cancel_callback(self, interaction, button: discord.ui.Button):
-        self.clear_items()
-        self.embed.clear_fields()
-        self.embed = await self.cancel_embed()
-        self.session.commit_log()
-        await interaction.response.edit_message(view=self, embed=self.embed)
 
 
 class PairView(discord.ui.View):

@@ -5,8 +5,10 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="04be35e8-3f4e-43c9-b4c7-2b4ecaf02e9e" name="Changes" comment="">
+      <change afterPath="$PROJECT_DIR$/json_example.json" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/bot/database.py" beforeDir="false" afterPath="$PROJECT_DIR$/bot/database.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/bot/log.py" beforeDir="false" afterPath="$PROJECT_DIR$/bot/log.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/bot/match.py" beforeDir="false" afterPath="$PROJECT_DIR$/bot/match.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/bot/session.py" beforeDir="false" afterPath="$PROJECT_DIR$/bot/session.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/bot/view.py" beforeDir="false" afterPath="$PROJECT_DIR$/bot/view.py" afterDir="false" />
@@ -189,16 +191,10 @@
     <breakpoint-manager>
       <breakpoints>
         <line-breakpoint enabled="true" suspend="NONE" type="python-line">
-          <url>file://$PROJECT_DIR$/bot/view.py</url>
-          <line>91</line>
-          <log-expression expression="current_match.bye" language="Python" />
-          <option name="timeStamp" value="1" />
-        </line-breakpoint>
-        <line-breakpoint enabled="true" suspend="NONE" type="python-line">
-          <url>file://$PROJECT_DIR$/bot/session.py</url>
-          <line>183</line>
-          <log-expression expression="unassigned_players" language="Python" />
-          <option name="timeStamp" value="3" />
+          <url>file://$PROJECT_DIR$/bot/log.py</url>
+          <line>13</line>
+          <log-expression expression="match.pairings[0].p1" language="Python" />
+          <option name="timeStamp" value="17" />
         </line-breakpoint>
       </breakpoints>
     </breakpoint-manager>
