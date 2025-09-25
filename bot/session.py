@@ -8,9 +8,10 @@ from datetime import datetime
 
 
 class Session:
-    def __init__(self, players, database):
+    def __init__(self, players, database, recorded):
         self.players = players
         self.db = database
+        self.recorded = recorded
         self.removed_players = []
         self.game_winners = None
         self.match_set = {1: Match(), 2: Match(), 3: Match()}
@@ -85,11 +86,15 @@ class Session:
 
     # Commit all player ELO scores to the database
     def commit_elo_scores(self):
+        if not self.recorded:
+            return
         for player in self.players:
             self.db.set_elo(player.id, player.new_elo)
 
     # Commit a final log to the database
     def commit_log(self):
+        if not self.recorded:
+            return
         # Update the player ranks
         for player in self.players:
             player.new_rank = self.db.get_rank(player.id)
@@ -131,13 +136,13 @@ class Session:
                     elif len(unassigned_players[0]) == 0 and unassigned_players[1]:
                         matched_player = self.match_player(given_player, unassigned_players[1])
                         unassigned_players[1].remove(matched_player)
-                    # If there is one player leftover in the unassigned winners and there aren't any players with
-                    # losses, put the leftover player on the bye
-                    if len(unassigned_players[0]) == 1 and not unassigned_players[1]:
-                        active_match.bye = unassigned_players[0][0]
-                        unassigned_players[0].remove(active_match.bye)
+                    # If there are no players leftover in the unassigned winners and there aren't any players with
+                    # losses, put the given player on the bye
+                    elif len(unassigned_players[0]) == 0 and not unassigned_players[1]:
+                        active_match.bye = given_player
                     # Create a new pairing in the match
-                    active_match.new_pairing(given_player, matched_player)
+                    if matched_player:
+                        active_match.new_pairing(given_player, matched_player)
                 # While there are unassigned players with 1 or 2 losses
                 while unassigned_players[1] or unassigned_players[2]:
                     given_player = None

@@ -1,5 +1,6 @@
 import json
 
+
 class Log:
     def __init__(self, players):
         self.players = players

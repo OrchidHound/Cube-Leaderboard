@@ -65,7 +65,7 @@ if __name__ == '__main__':
 
     @has_required_role()
     @bot.hybrid_command(name="new_game", description="Create a new game session.")
-    async def new_game(ctx, players_str: str):
+    async def new_game(ctx, players_str: str, recorded: bool = True):
         player_tags = players_str.split()
 
         # List of players must be at least 4
@@ -75,7 +75,7 @@ if __name__ == '__main__':
 
         players = await get_players(ctx, player_tags)
 
-        session = Session(players, db)
+        session = Session(players, db, recorded)
         view = SessionView(ctx, session, ctx.message.id)
         bot.add_view(view)
         await ctx.send(view=view, embed=view.roster_embed())
@@ -90,7 +90,7 @@ if __name__ == '__main__':
             await ctx.send("Please attach a JSON file with the game results. See Github for the format.")
             return
         json_file = await file.to_file()
-        session = Session(players, db)
+        session = Session(players, db, True)
         if session.manual_match(json.load(json_file.fp)):
             await ctx.send("Match results have been recorded.")
         else:

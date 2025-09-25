@@ -107,6 +107,23 @@ class Database:
         except Error as e:
             print('Get all players error: ' + str(e))
 
+    def get_player_nick(self, player_id):
+        try:
+            self.c.execute(
+                f"""
+                SELECT player_nick FROM players
+                WHERE player_id = ?
+                """,
+                (player_id,)
+            )
+            record = self.c.fetchone()
+            if record:
+                return record[0]
+            else:
+                return None
+        except Error as e:
+            print('Get player name error: ' + str(e))
+
     def set_elo(self, player_id, elo):
         try:
             self.c.execute(
