@@ -11,6 +11,5 @@ class Player:
 
     # Get nickname of player cut off at the 20th character for formatting purposes
     def get_trimmed_nick(self):
+        self.nick.replace("_", "\_")
         return self.nick[:19]
-
-

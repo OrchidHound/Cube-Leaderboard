@@ -5,12 +5,8 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="04be35e8-3f4e-43c9-b4c7-2b4ecaf02e9e" name="Changes" comment="">
-      <change afterPath="$PROJECT_DIR$/data_parser.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/bot/database.py" beforeDir="false" afterPath="$PROJECT_DIR$/bot/database.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/bot/log.py" beforeDir="false" afterPath="$PROJECT_DIR$/bot/log.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/bot/session.py" beforeDir="false" afterPath="$PROJECT_DIR$/bot/session.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/main.py" beforeDir="false" afterPath="$PROJECT_DIR$/main.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/bot/player.py" beforeDir="false" afterPath="$PROJECT_DIR$/bot/player.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -184,16 +180,5 @@
         </entry>
       </map>
     </option>
-  </component>
-  <component name="XDebuggerManager">
-    <breakpoint-manager>
-      <breakpoints>
-        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
-          <url>file://$PROJECT_DIR$/bot/session.py</url>
-          <line>222</line>
-          <option name="timeStamp" value="18" />
-        </line-breakpoint>
-      </breakpoints>
-    </breakpoint-manager>
   </component>
 </project>
