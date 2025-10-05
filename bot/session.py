@@ -205,9 +205,9 @@ class Session:
 
     def manual_match(self, data):
         def get_player_by_id(player_id):
-            for player in self.players:
-                if str(player.id) == player_id:
-                    return player
+            for p in self.players:
+                if str(p.id) == player_id:
+                    return p
 
         self.active_match_num = 1
 

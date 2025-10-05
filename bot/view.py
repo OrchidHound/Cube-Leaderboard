@@ -206,6 +206,7 @@ class SessionView(PersistentView):
                 response = await interaction.followup.send(view=pairing_view)
             pairing_view.response = response
         self.add_buttons([self.create_button("Finalize", "green", "finalize", self.finalize_match_callback)])
+        self.add_buttons([self.create_button("Refresh", "green", "enter_results", self.enter_results_callback)])
         await interaction.message.edit(view=self, embed=self.embed)
 
     # Callback for finalize match button
