@@ -195,6 +195,10 @@ class SessionView(PersistentView):
     # Callback for enter results button
     async def enter_results_callback(self, interaction, button: discord.ui.Button):
         pairings = self.session.get_current_match().pairings
+        # Delete any existing pairing views
+        for pairing in self.session.get_current_match().pairings:
+            if pairing.view is not None:
+                await pairing.view.response.delete()
         # Create a new view for each pairing in the current match
         for i in range(len(pairings)):
             pairing_view = PairView(pairings[i].p1, pairings[i].p2)
