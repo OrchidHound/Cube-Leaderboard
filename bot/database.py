@@ -19,6 +19,21 @@ class Database:
     def __init__(self):
         self.conn, self.c = connect(db_file=pathlib.Path(__file__).parent.parent / 'cube_leaderboard.db')
 
+    def clear_tables(self):
+        try:
+            self.c.execute(
+                """
+                DROP TABLE IF EXISTS players;
+                DROP TABLE IF EXISTS session_logs;
+                """
+            )
+
+            self.conn.commit()
+            return True
+        except Error as e:
+            print('Create tables error: ' + str(e))
+            return False
+
     def create_tables(self):
         try:
             self.c.execute(
