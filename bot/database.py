@@ -24,6 +24,11 @@ class Database:
             self.c.execute(
                 """
                 DROP TABLE IF EXISTS players;
+                """
+            )
+
+            self.c.execute(
+                """
                 DROP TABLE IF EXISTS session_logs;
                 """
             )
