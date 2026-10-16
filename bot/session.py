@@ -220,7 +220,7 @@ class Session:
                 active_match.new_pairing(p1, p2)
                 active_match.pairings[-1].wins = {p1: pairing['p1_wins'], p2: pairing['p2_wins']}
                 active_match.pairings[-1].adjust_elo()
-            self.log.add_match(active_match, self.active_match_num)
+            # self.log.add_match(active_match, self.active_match_num)
             self.commit_elo_scores()
             self.increment_match_num()
 
