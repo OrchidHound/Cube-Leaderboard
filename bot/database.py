@@ -1,6 +1,8 @@
 import sqlite3
 from sqlite3 import Error
 import pathlib
+import functools
+import threading
 
 
 # Returns a connection to the database with the connection cursor
@@ -8,7 +10,7 @@ def connect(db_file):
     conn = None
 
     try:
-        conn = sqlite3.connect(db_file)
+        conn = sqlite3.connect(db_file, check_same_thread=False)
     except Error as e:
         print("Error: " + str(e))
 
@@ -18,6 +20,8 @@ def connect(db_file):
 class Database:
     def __init__(self):
         self.conn, self.c = connect(db_file=pathlib.Path(__file__).parent.parent / 'cube_leaderboard.db')
+        # Callbacks run database work in worker threads, so serialize access to the shared connection
+        self._lock = threading.RLock()
 
     def clear_tables(self):
         try:
@@ -200,6 +204,19 @@ class Database:
             self.conn.commit()
         except Error as e:
             print('Increment error: ' + str(e))
+
+
+def _synchronized(fn):
+    @functools.wraps(fn)
+    def wrapper(self, *args, **kwargs):
+        with self._lock:
+            return fn(self, *args, **kwargs)
+    return wrapper
+
+
+for _name in ('clear_tables', 'create_tables', 'get_leaderboard', 'get_rank', 'get_elo', 'get_all_players',
+              'get_player_nick', 'set_elo', 'set_player', 'set_log', 'increment_games_played'):
+    setattr(Database, _name, _synchronized(getattr(Database, _name)))
 
 
 if __name__ == '__main__':

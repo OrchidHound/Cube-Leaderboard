@@ -1,3 +1,4 @@
+import asyncio
 import io
 import json
 
@@ -27,7 +28,7 @@ if __name__ == '__main__':
 
 
     async def get_players(ctx, player_tags):
-        db_players = db.get_all_players()
+        db_players = await asyncio.to_thread(db.get_all_players)
         players = []
 
         # Populate players list with participating players
@@ -41,7 +42,7 @@ if __name__ == '__main__':
                 # If the player's Discord tag is found in the database
                 if player_tag == db_row[1]:
                     player_id, player_nick, original_elo, original_rank = \
-                        db_row[0], db_row[2], db_row[4], db.get_rank(player_id)
+                        db_row[0], db_row[2], db_row[4], await asyncio.to_thread(db.get_rank, player_id)
 
             # If the player was not found in the database
             if player_id is None and not temporary:
@@ -53,7 +54,7 @@ if __name__ == '__main__':
                     if player_nick is None:
                         player_nick = ctx.guild.get_member(new_player.id).name
                     # Set player info in database
-                    db.set_player(player_id, player_tag, player_nick)
+                    await asyncio.to_thread(db.set_player, player_id, player_tag, player_nick)
                 else:
                     print("Issue retrieving player's info from Discord (Main.py new_game())")
 
@@ -66,6 +67,8 @@ if __name__ == '__main__':
     @has_required_role()
     @bot.hybrid_command(name="new_game", description="Create a new game session.")
     async def new_game(ctx, players_str: str, recorded: bool = True):
+        # Acknowledge right away; looking up players can exceed Discord's 3 second response limit
+        await ctx.defer()
         player_tags = players_str.split()
 
         # List of players must be at least 4
@@ -77,13 +80,15 @@ if __name__ == '__main__':
 
         session = Session(players, db, recorded)
         view = SessionView(ctx, session, ctx.message.id)
-        bot.add_view(view)
-        await ctx.send(view=view, embed=view.roster_embed())
+        message = await ctx.send(view=view, embed=view.roster_embed())
+        # Scope the persistent view to its message so sessions don't overwrite each other's buttons
+        bot.add_view(view, message_id=message.id)
 
 
     @has_required_role()
     @bot.hybrid_command(name="manual_game", description="Input a game session manually.")
     async def manual_game(ctx, players_str: str, file: discord.Attachment):
+        await ctx.defer()
         player_tags = players_str.split()
         players = await get_players(ctx, player_tags)
         if file.content_type != "application/json; charset=utf-8":
@@ -91,7 +96,7 @@ if __name__ == '__main__':
             return
         json_file = await file.to_file()
         session = Session(players, db, True)
-        if session.manual_match(json.load(json_file.fp)):
+        if await asyncio.to_thread(session.manual_match, json.load(json_file.fp)):
             await ctx.send("Match results have been recorded.")
         else:
             await ctx.send("Error recording match results.")
@@ -99,7 +104,8 @@ if __name__ == '__main__':
 
     @bot.hybrid_command(name="leaderboard", description="Get the current leaderboard for your server.")
     async def leaderboard(ctx):
-        server_leaderboard = db.get_leaderboard()
+        await ctx.defer()
+        server_leaderboard = await asyncio.to_thread(db.get_leaderboard)
         embed = discord.Embed(
             title=f"Leaderboard",
             description="",

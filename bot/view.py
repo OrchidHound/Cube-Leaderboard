@@ -1,4 +1,5 @@
 from bot.decorators import has_required_role
+import asyncio
 import random
 import discord
 
@@ -9,6 +10,8 @@ class PersistentView(discord.ui.View):
         self.session = session
         self.session_id = session_id
         self.ctx = ctx
+        # Serializes button presses so slow callbacks can't be re-entered by repeated clicks
+        self.lock = asyncio.Lock()
         self.embed = discord.Embed(color=0x24bc9c)
         self.embed.set_image(url="https://cdn.discordapp.com/attachments/1186834070085316691/1226447322368577608/"
                                  "footer.png?ex=6624cd13&is=66125813&hm="
@@ -47,8 +50,10 @@ class PersistentView(discord.ui.View):
         self.clear_items()
         self.embed.clear_fields()
         self.embed = await self.cancel_embed()
-        self.session.commit_log()
-        await interaction.response.edit_message(view=self, embed=self.embed)
+        await asyncio.to_thread(self.session.commit_log)
+        await interaction.edit_original_response(view=self, embed=self.embed)
+        # Unregister the view so it no longer stays in memory
+        self.stop()
 
 
 class SessionView(PersistentView):
@@ -157,8 +162,6 @@ class SessionView(PersistentView):
             self.embed.description = "Looks like nobody wins this session. Better luck next time!"
 
         for player in self.session.players:
-            if player.id is not None:
-                self.session.db.increment_games_played(player.id)
             # Create a field for each player with their new ELO and rank
             spacing = 25 - len(player.get_trimmed_nick())
             if spacing % 2 == 0:
@@ -178,69 +181,93 @@ class SessionView(PersistentView):
 
         return self.embed
 
+    # Persist the finished session; blocking database work, so run it in a worker thread
+    def record_session(self):
+        self.session.commit_elo_scores()
+        self.session.commit_log()
+        for player in self.session.players:
+            if player.id is not None:
+                self.session.db.increment_games_played(player.id)
+
+    # Delete the pairing messages. The interaction token that created them expires after 15 minutes,
+    # so fall back to deleting through the channel
+    async def delete_pairing_views(self, interaction, pairings):
+        async def delete(pairing):
+            message = pairing.view.response
+            try:
+                await message.delete()
+            except discord.NotFound:
+                pass
+            except discord.HTTPException:
+                try:
+                    await interaction.channel.get_partial_message(message.id).delete()
+                except discord.HTTPException:
+                    pass
+            pairing.view = None
+
+        await asyncio.gather(*(delete(p) for p in pairings if p.view is not None))
+
     # Callback for seating button
     async def seating_callback(self, interaction, button: discord.ui.Button):
         self.embed.clear_fields()
         self.embed = self.seating_embed()
         self.add_buttons([self.create_button("Start Match", "green", "next_match", self.next_match_callback)])
-        await interaction.response.edit_message(view=self, embed=self.embed)
+        await interaction.edit_original_response(view=self, embed=self.embed)
 
     # Callback for next match button
     async def next_match_callback(self, interaction, button: discord.ui.Button):
+        if self.session.active_match_num >= 3:
+            return
         self.embed.clear_fields()
         self.embed = self.match_embed()
         self.add_buttons([self.create_button("Enter Results", "green", "enter_results", self.enter_results_callback)])
-        await interaction.response.edit_message(view=self, embed=self.embed)
+        await interaction.edit_original_response(view=self, embed=self.embed)
 
     # Callback for enter results button
     async def enter_results_callback(self, interaction, button: discord.ui.Button):
         pairings = self.session.get_current_match().pairings
         # Delete any existing pairing views
-        for pairing in self.session.get_current_match().pairings:
-            if pairing.view is not None:
-                await pairing.view.response.delete()
+        await self.delete_pairing_views(interaction, pairings)
         # Create a new view for each pairing in the current match
-        for i in range(len(pairings)):
-            pairing_view = PairView(pairings[i].p1, pairings[i].p2)
-            pairings[i].view = pairing_view
-            if i == 0:
-                await interaction.response.send_message(view=pairing_view)
-                response = await interaction.original_response()
-            else:
-                response = await interaction.followup.send(view=pairing_view)
-            pairing_view.response = response
+        for pairing in pairings:
+            pairing_view = PairView(pairing.p1, pairing.p2)
+            pairing.view = pairing_view
+            pairing_view.response = await interaction.followup.send(view=pairing_view, wait=True)
         self.add_buttons([self.create_button("Finalize", "green", "finalize", self.finalize_match_callback),
                           self.create_button("Refresh", "green", "enter_results", self.enter_results_callback)])
-        await interaction.message.edit(view=self, embed=self.embed)
+        await interaction.edit_original_response(view=self, embed=self.embed)
 
     # Callback for finalize match button
     async def finalize_match_callback(self, interaction, button: discord.ui.Button):
-        for pairing in self.session.get_current_match().pairings:
+        pairings = self.session.get_current_match().pairings
+        for pairing in pairings:
             if pairing.view is not None:
                 pairing.wins = pairing.view.wins
             if pairing.view is None or pairing.get_match_winner() is None:
-                await interaction.response.send_message(
+                await interaction.followup.send(
                     "Please enter results for all pairings before finalizing.",
                     ephemeral=True
                 )
                 return
-        for pairing in self.session.get_current_match().pairings:
+        for pairing in pairings:
             pairing.adjust_elo()
-            await pairing.view.response.delete()
+        await self.delete_pairing_views(interaction, pairings)
         self.session.log.add_match(self.session.get_current_match(), self.session.active_match_num)
         self.embed.clear_fields()
-        if self.session.active_match_num < 3:
+        finished = self.session.active_match_num >= 3
+        if not finished:
             self.embed = self.intermission_embed()
             self.add_buttons([
                 self.create_button("Next Match", "green", "next_match", self.next_match_callback),
                 self.create_button("Drop Users", "green", "drop_users", self.drop_users_callback)
             ])
         else:
-            self.session.commit_elo_scores()
-            self.session.commit_log()
+            await asyncio.to_thread(self.record_session)
             self.embed = self.winners_embed()
 
-        await interaction.response.edit_message(view=self, embed=self.embed)
+        await interaction.edit_original_response(view=self, embed=self.embed)
+        if finished:
+            self.stop()
 
     # Callback for drop users button
     async def drop_users_callback(self, interaction, button: discord.ui.Button):
@@ -259,7 +286,7 @@ class SessionView(PersistentView):
         self.add_item(selector)
         self.embed.clear_fields()
         self.embed = self.drop_users_embed()
-        await interaction.response.edit_message(view=self, embed=self.embed)
+        await interaction.edit_original_response(view=self, embed=self.embed)
 
     # Callback for finalize drops button
     async def finalize_drops_callback(self, interaction, button: discord.ui.Button):
@@ -271,7 +298,7 @@ class SessionView(PersistentView):
             self.create_button("Next Match", "green", "next_match", self.next_match_callback),
             self.create_button("Drop Users", "green", "drop_users", self.drop_users_callback)
         ])
-        await interaction.response.edit_message(view=self, embed=self.embed)
+        await interaction.edit_original_response(view=self, embed=self.embed)
 
     # Callback for selector
     async def selector_callback(self, interaction, select: discord.ui.Select):
@@ -327,7 +354,15 @@ class CallbackButton(discord.ui.Button):
         self.custom_callback = custom_callback
 
     async def callback(self, interaction: discord.Interaction):
-        await self.custom_callback(interaction, self)
+        view = self.view
+        if view.lock.locked():
+            await interaction.response.send_message("Still processing the previous action, please wait.",
+                                                    ephemeral=True)
+            return
+        async with view.lock:
+            # Acknowledge within Discord's 3 second limit before doing any slow work
+            await interaction.response.defer()
+            await self.custom_callback(interaction, self)
 
 
 class CallbackSelector(discord.ui.Select):
